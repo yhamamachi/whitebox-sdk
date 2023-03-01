@@ -8,7 +8,7 @@ Please refer to the official webpage:
 Execute the following command:
 
 	sudo apt install git	
-	git clone https://github.com/renesas-rcar/whitebox-sdk.git -b v3.x
+	git clone https://github.com/renesas-rcar/whitebox-sdk.git -b v3.x-dev
 
 # Tool setup
 Since GUI operation is required during installation, it must be run on an Ubuntu PC.
