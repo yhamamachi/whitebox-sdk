@@ -1,0 +1,29 @@
+From 1ae792207939eb7d193c08fb724fd3519b859ed9 Mon Sep 17 00:00:00 2001
+From: Duy Dang <duy.dang.yw@renesas.com>
+Date: Fri, 21 Apr 2023 13:24:51 +0900
+Subject: [PATCH] domd: Change boot partition to 4
+
+---
+ .../recipes-guests/domd/files/domd-s4sk-proto.cfg             | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/meta-aos-rcar-gen4-control-domain/recipes-guests/domd/files/domd-s4sk-proto.cfg b/meta-aos-rcar-gen4-control-domain/recipes-guests/domd/files/domd-s4sk-proto.cfg
+index f05a23c..38bc62d 100644
+--- a/meta-aos-rcar-gen4-control-domain/recipes-guests/domd/files/domd-s4sk-proto.cfg
++++ b/meta-aos-rcar-gen4-control-domain/recipes-guests/domd/files/domd-s4sk-proto.cfg
+@@ -10,9 +10,11 @@ name = "DomD"
+ # Kernel image to boot
+ kernel = "/usr/lib/xen/boot/linux-domd"
+ 
++ramdisk = "/usr/lib/xen/boot/initramfs-domd"
++
+ device_tree = "/usr/lib/xen/boot/domd.dtb"
+ 
+-extra = "root=/dev/STORAGE_PART2 rw rootwait console=hvc0 clk_ignore_unused pci=pcie_bus_perf"
++extra = "root=/dev/STORAGE_PART4 ro rootwait console=hvc0 clk_ignore_unused pci=pcie_bus_perf vardir.disk=/dev/STORAGE_PART5 opendisk.target=/dev/STORAGE_PART6 opendisk.pkcs11=optee aosupdate.disk=/dev/aosvg/downloads aosupdate.path=update_rootfs"
+ 
+ # Initial memory allocation (MB)
+ memory = 1024
+-- 
+2.25.1
+

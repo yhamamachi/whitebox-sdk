@@ -1,8 +1,8 @@
 FILESEXTRAPATHS_prepend := "${THISDIR}/${PN}:"
 
-RENESAS_BSP_URL = "git://github.com/xen-troops/linux.git"
-BRANCH = "v5.10.41/rcar-5.1.7.rc3-xt"
-SRCREV = "e74fea0be1d2553617f13344babdfbeb0cee4eeb"
+RENESAS_BSP_URL_spider = "git://github.com/xen-troops/linux.git"
+BRANCH_spider = "v5.10.41/rcar-5.1.7.rc3-xt"
+SRCREV_spider = "e74fea0be1d2553617f13344babdfbeb0cee4eeb"
 
 SRC_URI_append = " \
      file://0001-dts-iccom-use-proper-driver-instead-of-generic-uio.patch \
@@ -24,3 +24,4 @@ python __anonymous () {
         dtb = fname[:-3] + "dtb"
         d.appendVar("KERNEL_DEVICETREE", " renesas/%s"%dtb)
 }
+

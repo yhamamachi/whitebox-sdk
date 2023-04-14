@@ -1,0 +1,136 @@
+From 89159dc433251cc6088c81986d98507d60968857 Mon Sep 17 00:00:00 2001
+From: Duy Dang <duy.dang.yw@renesas.com>
+Date: Fri, 14 Apr 2023 17:17:59 +0900
+Subject: [PATCH] whitebox: xen: Remove applied patches
+
+Signed-off-by: Duy Dang <duy.dang.yw@renesas.com>
+---
+ ...01-pci-rcar4-Dont-t-use-ECAM-mapping.patch | 40 --------------
+ ...se-different-TLP-types-for-root-and-.patch | 54 -------------------
+ .../recipes-extended/xen/xen_git.bbappend     |  2 -
+ 3 files changed, 96 deletions(-)
+ delete mode 100644 meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0001-pci-rcar4-Dont-t-use-ECAM-mapping.patch
+ delete mode 100644 meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0002-SPIDER-xen-arm-Use-different-TLP-types-for-root-and-.patch
+
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0001-pci-rcar4-Dont-t-use-ECAM-mapping.patch b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0001-pci-rcar4-Dont-t-use-ECAM-mapping.patch
+deleted file mode 100644
+index 8fdcb3e..0000000
+--- a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0001-pci-rcar4-Dont-t-use-ECAM-mapping.patch
++++ /dev/null
+@@ -1,40 +0,0 @@
+-From 16475ecdfd82e7d2cdde7dc287365eea37fb26c8 Mon Sep 17 00:00:00 2001
+-From: Dmytro Semenets <dmytro_semenets@epam.com>
+-Date: Tue, 6 Sep 2022 12:25:01 +0300
+-Subject: [PATCH 01/10] pci: rcar4: Dont't use ECAM mapping
+-
+-iATU already provides correct mapping for device. We don't
+-need to apply ECAM address translation logic on top of it.
+-
+-Signed-off-by: Dmytro Semenets <dmytro_semenets@epam.com>
+-Acked-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
+----
+- xen/arch/arm/pci/pci-host-rcar4.c | 5 +----
+- 1 file changed, 1 insertion(+), 4 deletions(-)
+-
+-diff --git a/xen/arch/arm/pci/pci-host-rcar4.c b/xen/arch/arm/pci/pci-host-rcar4.c
+-index 4becf68f33..ae9c385844 100644
+---- a/xen/arch/arm/pci/pci-host-rcar4.c
+-+++ b/xen/arch/arm/pci/pci-host-rcar4.c
+-@@ -369,8 +369,6 @@ static void dw_pcie_prog_outbound_atu(struct pci_host_bridge *pci, int index,
+- static void __iomem *rcar4_child_map_bus(struct pci_host_bridge *bridge,
+-                                          pci_sbdf_t sbdf, uint32_t where)
+- {
+--    const struct pci_ecam_ops *ops =
+--        container_of(bridge->child_ops, const struct pci_ecam_ops, pci_ops);
+-     uint32_t busdev;
+- 
+-     busdev = PCIE_ATU_BUS(sbdf.bus) | PCIE_ATU_DEV(PCI_SLOT(sbdf.devfn)) |
+-@@ -382,8 +380,7 @@ static void __iomem *rcar4_child_map_bus(struct pci_host_bridge *bridge,
+-                               bridge->child_cfg->phys_addr,
+-                               busdev, bridge->child_cfg->size);
+- 
+--
+--    return pci_ecam_map_bus_generic(bridge->child_cfg, ops, sbdf, where);
+-+    return bridge->child_cfg->win + where;
+- }
+- 
+- static int rcar4_child_config_read(struct pci_host_bridge *bridge,
+--- 
+-2.25.1
+-
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0002-SPIDER-xen-arm-Use-different-TLP-types-for-root-and-.patch b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0002-SPIDER-xen-arm-Use-different-TLP-types-for-root-and-.patch
+deleted file mode 100644
+index f5ce785..0000000
+--- a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0002-SPIDER-xen-arm-Use-different-TLP-types-for-root-and-.patch
++++ /dev/null
+@@ -1,54 +0,0 @@
+-From cae0db17acdc51efe09cbab2f2fa41684047046f Mon Sep 17 00:00:00 2001
+-From: Dmytro Semenets <dmytro_semenets@epam.com>
+-Date: Tue, 6 Sep 2022 12:55:52 +0300
+-Subject: [PATCH 02/10] [SPIDER] xen/arm: Use different TLP types for root and
+- non-root buses
+-
+-Documentation is unclear but acoording to linux driver different TLB tipes
+-should be used for root and non-root buses.
+-Present method for determining root bus - perhaps workarround based on
+-assumption root bus has number 0 or 1.
+-
+-Signed-off-by: Dmytro Semenets <dmytro_semenets@epam.com>
+-Acked-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
+----
+- xen/arch/arm/pci/pci-host-rcar4.c | 11 ++++++++---
+- 1 file changed, 8 insertions(+), 3 deletions(-)
+-
+-diff --git a/xen/arch/arm/pci/pci-host-rcar4.c b/xen/arch/arm/pci/pci-host-rcar4.c
+-index ae9c385844..1e1a0d954d 100644
+---- a/xen/arch/arm/pci/pci-host-rcar4.c
+-+++ b/xen/arch/arm/pci/pci-host-rcar4.c
+-@@ -103,6 +103,7 @@ const struct pci_ecam_ops rcar4_pcie_ops = {
+- #define PCIE_ATU_REGION_INDEX1  0x1
+- #define PCIE_ATU_TYPE_IO        0x2
+- #define PCIE_ATU_TYPE_CFG0      0x4
+-+#define PCIE_ATU_TYPE_CFG1      0x5
+- 
+- #define PCIE_ATU_BUS(x)         FIELD_PREP(GENMASK(31, 24), x)
+- #define PCIE_ATU_DEV(x)         FIELD_PREP(GENMASK(23, 19), x)
+-@@ -370,14 +371,18 @@ static void __iomem *rcar4_child_map_bus(struct pci_host_bridge *bridge,
+-                                          pci_sbdf_t sbdf, uint32_t where)
+- {
+-     uint32_t busdev;
+-+    int type;
+- 
+-     busdev = PCIE_ATU_BUS(sbdf.bus) | PCIE_ATU_DEV(PCI_SLOT(sbdf.devfn)) |
+-         PCIE_ATU_FUNC(PCI_FUNC(sbdf.devfn));
+- 
+--    /* FIXME: Parent is the root bus, so use PCIE_ATU_TYPE_CFG0. */
+-+    /* TODO: Correct method to determine root bus. */
+-+    if (sbdf.bus <= 1)
+-+        type = PCIE_ATU_TYPE_CFG0;
+-+    else
+-+        type = PCIE_ATU_TYPE_CFG1;
+-     dw_pcie_prog_outbound_atu(bridge, PCIE_ATU_REGION_INDEX1,
+--                              PCIE_ATU_TYPE_CFG0,
+--                              bridge->child_cfg->phys_addr,
+-+                              type, bridge->child_cfg->phys_addr,
+-                               busdev, bridge->child_cfg->size);
+- 
+-     return bridge->child_cfg->win + where;
+--- 
+-2.25.1
+-
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/xen_git.bbappend b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/xen_git.bbappend
+index a6a8a8e..0e1366c 100644
+--- a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/xen_git.bbappend
++++ b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/xen_git.bbappend
+@@ -2,8 +2,6 @@ FILESEXTRAPATHS_prepend := "${THISDIR}/files:"
+ 
+ SRC_URI_append_s4sk-proto = " \
+     file://early_printk_s4sk-proto.cfg \
+-    file://0001-pci-rcar4-Dont-t-use-ECAM-mapping.patch \
+-    file://0002-SPIDER-xen-arm-Use-different-TLP-types-for-root-and-.patch \
+     file://0003-xen-arm-rcar4-add-delay-after-programming-ATU.patch \
+     file://0004-xen-arm-rcar4-add-simple-optimization-to-avoid-ATU-r.patch \
+     file://0005-xen-arm-rcar4-program-ATU-to-accesses-to-all-functio.patch \
+-- 
+2.25.1
+

@@ -1,0 +1,133 @@
+From 9b4c0cd9416f68d3b00087c6b2d8158cf62dccac Mon Sep 17 00:00:00 2001
+From: Duy Dang <duy.dang.yw@renesas.com>
+Date: Fri, 14 Apr 2023 16:05:54 +0900
+Subject: [PATCH 9/9] domd: domu: kernel: add patch fix for VMQ virtual
+ interface
+
+Signed-off-by: Duy Dang <duy.dang.yw@renesas.com>
+---
+ ...v-pointer-condition-before-setting-s.patch | 39 +++++++++++++++++++
+ .../linux/linux-renesas_%.bbappend            |  1 +
+ ...v-pointer-condition-before-setting-s.patch | 39 +++++++++++++++++++
+ .../linux/linux-renesas_%.bbappend            |  1 +
+ 4 files changed, 80 insertions(+)
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-rswich-Set-phydev-pointer-condition-before-setting-s.patch
+ create mode 100755 meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas/0001-rswich-Set-phydev-pointer-condition-before-setting-s.patch
+
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-rswich-Set-phydev-pointer-condition-before-setting-s.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-rswich-Set-phydev-pointer-condition-before-setting-s.patch
+new file mode 100755
+index 0000000..5d1a841
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-rswich-Set-phydev-pointer-condition-before-setting-s.patch
+@@ -0,0 +1,39 @@
++From 9fd36578428913e9b76610816f6df73a919921a3 Mon Sep 17 00:00:00 2001
++From: Dung Nguyen <dung.nguyen.zy@renesas.com>
++Date: Tue, 27 Dec 2022 22:14:53 +0700
++Subject: [PATCH] rswich: Set phydev pointer condition before setting state
++
++If "ndev->phydev" is NULL, set "PHY_DOWN" for ndev->phydev->state
++will cause a logic error.
++
++Signed-off-by: Dung Nguyen <dung.nguyen.zy@renesas.com>
++Signed-off-by: Vu Dang <vu.dang.te@renasas.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c | 4 ++--
++ 1 file changed, 2 insertions(+), 2 deletions(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index f0ab35445ca2..3a6e3f7ca8a8 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -2018,7 +2018,7 @@ static int rswitch_open(struct net_device *ndev)
++ 
++ error:
++ 	if (phy_started) {
++-		if (sk_board)
+++		if (sk_board && ndev->phydev)
++ 			ndev->phydev->state = PHY_DOWN;
++ 		phy_stop(ndev->phydev);
++ 	}
++@@ -2032,7 +2032,7 @@ static int rswitch_stop(struct net_device *ndev)
++ {
++ 	struct rswitch_device *rdev = netdev_priv(ndev);
++ 
++-	if (sk_board)
+++	if (sk_board && ndev->phydev)
++ 		ndev->phydev->state = PHY_DOWN;
++ 
++ 	if (rdev->etha && ndev->phydev)
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas_%.bbappend b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas_%.bbappend
+index caad1c4..2ce7879 100644
+--- a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas_%.bbappend
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas_%.bbappend
+@@ -40,6 +40,7 @@ SRC_URI_append = " \
+     file://0018-rswitch-vmq-front-streamline-MAC-handling.patch \
+     file://0019-rswitch-vmq-complete-switch-do-GWCA1.patch \
+     file://0020-rswtich-vmq-back-re-arrange-chains-configuration.patch \
++    file://0001-rswich-Set-phydev-pointer-condition-before-setting-s.patch \
+ "
+ 
+ ADDITIONAL_DEVICE_TREES = "${XT_DEVICE_TREES}"
+diff --git a/meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas/0001-rswich-Set-phydev-pointer-condition-before-setting-s.patch b/meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas/0001-rswich-Set-phydev-pointer-condition-before-setting-s.patch
+new file mode 100755
+index 0000000..5d1a841
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas/0001-rswich-Set-phydev-pointer-condition-before-setting-s.patch
+@@ -0,0 +1,39 @@
++From 9fd36578428913e9b76610816f6df73a919921a3 Mon Sep 17 00:00:00 2001
++From: Dung Nguyen <dung.nguyen.zy@renesas.com>
++Date: Tue, 27 Dec 2022 22:14:53 +0700
++Subject: [PATCH] rswich: Set phydev pointer condition before setting state
++
++If "ndev->phydev" is NULL, set "PHY_DOWN" for ndev->phydev->state
++will cause a logic error.
++
++Signed-off-by: Dung Nguyen <dung.nguyen.zy@renesas.com>
++Signed-off-by: Vu Dang <vu.dang.te@renasas.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c | 4 ++--
++ 1 file changed, 2 insertions(+), 2 deletions(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index f0ab35445ca2..3a6e3f7ca8a8 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -2018,7 +2018,7 @@ static int rswitch_open(struct net_device *ndev)
++ 
++ error:
++ 	if (phy_started) {
++-		if (sk_board)
+++		if (sk_board && ndev->phydev)
++ 			ndev->phydev->state = PHY_DOWN;
++ 		phy_stop(ndev->phydev);
++ 	}
++@@ -2032,7 +2032,7 @@ static int rswitch_stop(struct net_device *ndev)
++ {
++ 	struct rswitch_device *rdev = netdev_priv(ndev);
++ 
++-	if (sk_board)
+++	if (sk_board && ndev->phydev)
++ 		ndev->phydev->state = PHY_DOWN;
++ 
++ 	if (rdev->etha && ndev->phydev)
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas_%.bbappend b/meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas_%.bbappend
+index fb93f89..4c3b772 100644
+--- a/meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas_%.bbappend
++++ b/meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas_%.bbappend
+@@ -28,6 +28,7 @@ SRC_URI_append = " \
+     file://0018-rswitch-vmq-front-streamline-MAC-handling.patch \
+     file://0019-rswitch-vmq-complete-switch-do-GWCA1.patch \
+     file://0020-rswtich-vmq-back-re-arrange-chains-configuration.patch \
++    file://0001-rswich-Set-phydev-pointer-condition-before-setting-s.patch \
+ "
+ 
+ KERNEL_DEVICETREE_append = " renesas/r8a779f0-s4sk-proto-domu.dtb"
+-- 
+2.25.1
+

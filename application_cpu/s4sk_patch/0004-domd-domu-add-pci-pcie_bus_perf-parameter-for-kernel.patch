@@ -1,0 +1,40 @@
+From 47cf61f4060865e07015bbf3319b5b8d26a6a4b9 Mon Sep 17 00:00:00 2001
+From: Duy Dang <duy.dang.yw@renesas.com>
+Date: Fri, 14 Apr 2023 15:27:49 +0900
+Subject: [PATCH 4/9] domd, domu: add pci=pcie_bus_perf parameter for kernels
+
+Signed-off-by: Duy Dang <duy.dang.yw@renesas.com>
+---
+ .../recipes-guests/domd/files/domd-s4sk-proto.cfg               | 2 +-
+ .../recipes-guests/domu/files/domu-s4sk-proto.cfg               | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/meta-aos-rcar-gen4-control-domain/recipes-guests/domd/files/domd-s4sk-proto.cfg b/meta-aos-rcar-gen4-control-domain/recipes-guests/domd/files/domd-s4sk-proto.cfg
+index f3bfbfc..f05a23c 100644
+--- a/meta-aos-rcar-gen4-control-domain/recipes-guests/domd/files/domd-s4sk-proto.cfg
++++ b/meta-aos-rcar-gen4-control-domain/recipes-guests/domd/files/domd-s4sk-proto.cfg
+@@ -12,7 +12,7 @@ kernel = "/usr/lib/xen/boot/linux-domd"
+ 
+ device_tree = "/usr/lib/xen/boot/domd.dtb"
+ 
+-extra = "root=/dev/STORAGE_PART2 rw rootwait console=hvc0 clk_ignore_unused"
++extra = "root=/dev/STORAGE_PART2 rw rootwait console=hvc0 clk_ignore_unused pci=pcie_bus_perf"
+ 
+ # Initial memory allocation (MB)
+ memory = 1024
+diff --git a/meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu-s4sk-proto.cfg b/meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu-s4sk-proto.cfg
+index 442d0a8..892ada5 100644
+--- a/meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu-s4sk-proto.cfg
++++ b/meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu-s4sk-proto.cfg
+@@ -17,7 +17,7 @@ kernel = "/usr/lib/xen/boot/linux-domu"
+ 
+ device_tree = "/usr/lib/xen/boot/domu.dtb"
+ 
+-extra = "root=/dev/xvda1 rw rootwait console=hvc0"
++extra = "root=/dev/xvda1 rw rootwait console=hvc0 pci=pcie_bus_perf"
+ 
+ # Initial memory allocation (MB)
+ memory = 512
+-- 
+2.25.1
+

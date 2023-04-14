@@ -1,0 +1,25 @@
+From b52caa1bd5fadbcdb3f60f69375e6848b5617fdc Mon Sep 17 00:00:00 2001
+From: Duy Dang <duy.dang.yw@renesas.com>
+Date: Fri, 14 Apr 2023 15:20:05 +0900
+Subject: [PATCH 2/9] domu: passthrough power supply node for SD card
+
+Signed-off-by: Duy Dang <duy.dang.yw@renesas.com>
+---
+ .../recipes-guests/domu/files/domu-s4sk-proto.cfg                | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu-s4sk-proto.cfg b/meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu-s4sk-proto.cfg
+index 82e1b2b..442d0a8 100644
+--- a/meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu-s4sk-proto.cfg
++++ b/meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu-s4sk-proto.cfg
+@@ -30,6 +30,7 @@ tee = "optee"
+ on_crash = 'preserve'
+ 
+ dt_passthrough_nodes = [
++    "/regulator-vcc-sdhi",
+     "/reserved-memory",
+ ]
+ 
+-- 
+2.25.1
+

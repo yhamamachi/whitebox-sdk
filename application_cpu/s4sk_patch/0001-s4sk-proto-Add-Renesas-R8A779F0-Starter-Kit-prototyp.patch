@@ -1,0 +1,2070 @@
+From 93992d1bda06aad1944ab28e75f50d0c164a71ef Mon Sep 17 00:00:00 2001
+From: Duy Dang <duy.dang.yw@renesas.com>
+Date: Wed, 12 Apr 2023 10:46:36 +0900
+Subject: [PATCH 1/9] s4sk-proto: Add Renesas R8A779F0 Starter Kit prototype
+
+---
+ aos-rcar-s4sk.yaml                            | 351 ++++++++++++++++
+ .../recipes-guests/domd/domd.bbappend         |   2 +-
+ .../domd/files/domd-s4sk-proto.cfg            | 251 ++++++++++++
+ .../domu/files/domu-s4sk-proto.cfg            |  69 ++++
+ .../linux/linux-generic-armv8.bbappend        |   4 +-
+ ...x-incorrect-tftp_next_ack-on-no-OACK.patch |  37 --
+ .../u-boot/u-boot_2020.10.bbappend            |   8 -
+ .../linux-renesas/0001-PCIe-MSI-support.patch |  76 ++--
+ ...bile-Hide-clock-for-scif3-and-hscif0.patch |  30 +-
+ ...ow-compiling-on-other-archs-than-x86.patch |   4 +-
+ ...ACK-Allow-DomD-enumerate-PCI-devices.patch |   4 +-
+ ...s-emulate-reading-from-ECAM-under-Xe.patch |  21 +-
+ .../linux/linux-renesas/l3offload.cfg         |  32 ++
+ .../r8a779f0-s4sk-proto-domd.dts              | 124 ++++++
+ .../linux-renesas/r8a779f0-s4sk-proto-xen.dts | 373 ++++++++++++++++++
+ .../linux-renesas/r8a779f0-spider-xen.dts     |  13 +-
+ .../linux/linux-renesas_%.bbappend            |   5 +-
+ .../linux-libc-headers_%.bbappend             |   5 -
+ .../r8a779f0-s4sk-proto-domu.dts              | 210 ++++++++++
+ .../linux/linux-renesas_%.bbappend            |   8 +-
+ .../optee/optee-client_%.bbappend             |   2 +-
+ .../optee/optee-os_%.bbappend                 |   2 +-
+ .../optee/optee-test_%.bbappend               |   2 +-
+ .../files/systemd-networkd-wait-online.conf   |   3 -
+ ...spider.cfg => early_printk_s4sk-proto.cfg} |   0
+ .../recipes-extended/xen/xen_git.bbappend     |   4 +-
+ 26 files changed, 1500 insertions(+), 140 deletions(-)
+ create mode 100644 aos-rcar-s4sk.yaml
+ create mode 100644 meta-aos-rcar-gen4-control-domain/recipes-guests/domd/files/domd-s4sk-proto.cfg
+ create mode 100644 meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu-s4sk-proto.cfg
+ delete mode 100644 meta-aos-rcar-gen4-domd/recipes-bsp/u-boot/files/0001-net-tftp-Fix-incorrect-tftp_next_ack-on-no-OACK.patch
+ delete mode 100644 meta-aos-rcar-gen4-domd/recipes-bsp/u-boot/u-boot_2020.10.bbappend
+ create mode 100644 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/l3offload.cfg
+ create mode 100644 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/r8a779f0-s4sk-proto-domd.dts
+ create mode 100644 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/r8a779f0-s4sk-proto-xen.dts
+ delete mode 100644 meta-aos-rcar-gen4-domu/recipes-kernel/linux-libc-headers/linux-libc-headers_%.bbappend
+ create mode 100644 meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas/r8a779f0-s4sk-proto-domu.dts
+ delete mode 100644 meta-aos-rcar-gen4-driver-domain/recipes-connectivity/xen-network/files/systemd-networkd-wait-online.conf
+ rename meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/{early_printk_spider.cfg => early_printk_s4sk-proto.cfg} (100%)
+
+diff --git a/aos-rcar-s4sk.yaml b/aos-rcar-s4sk.yaml
+new file mode 100644
+index 0000000..1668707
+--- /dev/null
++++ b/aos-rcar-s4sk.yaml
+@@ -0,0 +1,351 @@
++desc: "Xen-Troops development setup for Renesas RCAR Gen4 hardware"
++min_ver: "0.4"
++
++variables:
++  YOCTOS_WORK_DIR: "yocto"
++  DOM0_BUILD_DIR: "build-dom0"
++  DOMD_BUILD_DIR: "build-domd"
++  DOMU_BUILD_DIR: "build-domu"
++  XT_DOMD_DTB_NAME: "%{SOC_FAMILY}-%{MACHINE}-domd.dtb"
++  XT_DOMU_DTB_NAME: "%{SOC_FAMILY}-%{MACHINE}-domu.dtb"
++  XT_XEN_DTB_NAME: "%{SOC_FAMILY}-%{MACHINE}-xen.dtb"
++  XT_GENERIC_DOMU_TAG: ""
++  MACHINE: "s4sk-proto"
++  SOC_FAMILY: "r8a779f0"
++  XT_DOMD_CONFIG_NAME: "domd-s4sk-proto.cfg"
++  XT_DOMU_CONFIG_NAME: "domu-s4sk-proto.cfg"
++
++  # Aos variables
++  AOS_BOARD_MODEL: "rcar-s4sk-proto"
++  AOS_BOARD_VERSION: "1.0"
++  AOS_BUNDLE_IMAGE_VERSION: "1.0.0"
++  AOS_BUNDLE_OSTREE_REPO: "${TOPDIR}/../../rootfs_repo"
++  AOS_BUNDLE_REF_VERSION: "0.3.0"
++  AOS_BUNDLE_DOM0_TYPE: "full"
++  AOS_BUNDLE_DOMD_TYPE: "full"
++  AOS_BUNDLE_RH850_TYPE: ""
++  AOS_RH850_IMAGE_VERSION: "1.0.0"
++  AOS_RH850_IMAGE_PATH: "${TOPDIR}/../../sample_image_RH850/v1.0/OTA_AlcoholApp_Image"
++
++common_data:
++  # Sources used by all yocto-based domains
++  sources: &COMMON_SOURCES
++    - type: git
++      url: "git://git.yoctoproject.org/poky"
++      rev: "232b553"
++    - type: git
++      url: "git://git.openembedded.org/meta-openembedded"
++      rev: "814eec9"
++    - type: git
++      url: "git://git.yoctoproject.org/meta-virtualization"
++      rev: "180241e"
++    - type: git
++      url: "git://git.yoctoproject.org/meta-arm"
++      rev: "5c096848"
++    - type: git
++      url: "https://github.com/xen-troops/meta-xt-common.git"
++      rev: "e27c46b"
++    - type: git
++      url: "https://github.com/aoscloud/meta-aos-rcar-gen4.git"
++      rev: "v1.0.0"
++  # Common configuration options for all yocto-based domains
++  conf: &COMMON_CONF
++    - [SSTATE_DIR, "${TOPDIR}/../../../common_data/sstate"]
++    - [DL_DIR, "${TOPDIR}/../../../common_data/downloads"]
++
++    # Skip warning about missing "virtualization" distro feature
++    - [SKIP_META_VIRT_SANITY_CHECK, "1"]
++
++    # Use hypervisor console on all guests
++    - [SERIAL_CONSOLES, "115200;hvc0"]
++
++    # Remove features that we are not using
++    - [
++        DISTRO_FEATURES_remove,
++        "x11 gtk gobject-introspection-data wifi nfc
++        bluetooth irda zeroconf 3g sysvinit acl alsa argp pcmcia usbgadget
++        usbhost opengl ptest multiarch wayland vulkan sysvinit",
++      ]
++
++    # Aos config
++    - [BOARD_MODEL, "%{AOS_BOARD_MODEL}"]
++    - [BOARD_VERSION, "%{AOS_BOARD_VERSION}"]
++    - [DOM0_IMAGE_VERSION, "%{AOS_BUNDLE_IMAGE_VERSION}"]
++    - [DOMD_IMAGE_VERSION, "%{AOS_BUNDLE_IMAGE_VERSION}"]
++    - [DOMU_IMAGE_VERSION, "%{AOS_BUNDLE_IMAGE_VERSION}"]
++    - [RH850_IMAGE_VERSION, "%{AOS_RH850_IMAGE_VERSION}"]
++
++  # Conf options for domain that are built used renesas layer
++  domd_domu_conf: &DOMD_DOMU_CONF
++    - [MACHINE, "%{MACHINE}"]
++    - [SOC_FAMILY, "%{SOC_FAMILY}"]
++
++    # Add systemd configuration
++    - [DISTRO_FEATURES_append, " systemd"]
++    - [VIRTUAL-RUNTIME_init_manager, "systemd"]
++
++    # add the static lib to SDK toolchain
++    - [SDKIMAGE_FEATURES_append, " staticdev-pkgs"]
++
++    # Add for gstreamer plugins ugly
++    - [LICENSE_FLAGS_WHITELIST, "commercial"]
++
++    # Add Capacity Aware migration Strategy (CAS)
++    - [MACHINE_FEATURES_append, " cas"]
++
++    # Remove ptest to reduce the build time
++    - [DISTRO_FEATURES_remove, "ptest"]
++
++    # Generate ext4 image files
++    - [IMAGE_FSTYPES_append, " ext4"]
++
++    # Disable renesas optee recipes
++    - [BBMASK, "meta-renesas/.*/optee"]
++
++components:
++  dom0:
++    build-dir: "%{YOCTOS_WORK_DIR}"
++    default: true
++    sources:
++      - *COMMON_SOURCES
++    builder:
++      type: yocto
++      work_dir: "%{DOM0_BUILD_DIR}"
++      conf:
++        - *COMMON_CONF
++        - [MACHINE, "generic-armv8-xt"]
++        - [XT_DOM_NAME, "dom0"]
++        - [XT_DOMD_MACHINE, "%{MACHINE}"]
++        - [XT_DOMU_MACHINE, "%{MACHINE}"]
++        - [XT_DOMD_SOC_FAMILY, "%{SOC_FAMILY}"]
++        - [XT_DOMD_CONFIG_NAME, "%{XT_DOMD_CONFIG_NAME}"]
++        - [XT_DOMU_CONFIG_NAME, "%{XT_DOMU_CONFIG_NAME}"]
++        - [XT_DOMD_DTB_NAME, "%{XT_DOMD_DTB_NAME}"]
++        - [XT_DOMU_DTB_NAME, "%{XT_DOMU_DTB_NAME}"]
++        - [XT_GUEST_INSTALL, "%{XT_GENERIC_DOMU_TAG} domd"]
++
++        # Disable HWDB which quite huge (around 15MB) and is not required at all
++        - [BAD_RECOMMENDATIONS_append, " udev-hwdb"]
++
++        # Enable systemd on dom0
++        - [DISTRO_FEATURES_append, " systemd"]
++        - [VIRTUAL-RUNTIME_init_manager, "systemd"]
++
++        # Do not install kernel image to rootfs to decrease initrd size
++        - ["RDEPENDS_${KERNEL_PACKAGE_NAME}-base", ""]
++
++        # Aos update config
++        - ["BUNDLE_DIR", "${TOPDIR}/../../"]
++        - ["BUNDLE_OSTREE_REPO", "%{AOS_BUNDLE_OSTREE_REPO}"]
++        - ["BUNDLE_DOM0_TYPE", "%{AOS_BUNDLE_DOM0_TYPE}"]
++        - ["BUNDLE_DOMD_TYPE", "%{AOS_BUNDLE_DOMD_TYPE}"]
++        - ["BUNDLE_RH850_TYPE", "%{AOS_BUNDLE_RH850_TYPE}"]
++        - ["DOMD_REF_VERSION", "%{AOS_BUNDLE_REF_VERSION}"]
++        - ["BUNDLE_IMAGE_VERSION", "%{AOS_BUNDLE_IMAGE_VERSION}"]
++        - ["RH850_IMAGE_PATH", "%{AOS_RH850_IMAGE_PATH}"]
++
++      layers:
++        - "../meta-virtualization"
++        - "../meta-openembedded/meta-oe"
++        - "../meta-openembedded/meta-filesystems"
++        - "../meta-openembedded/meta-python"
++        - "../meta-openembedded/meta-networking"
++        - "../meta-xt-common/meta-xt-control-domain"
++        - "../meta-xt-common/meta-xt-dom0"
++        - "../meta-xt-common/meta-xt-domx"
++        - "../meta-aos-rcar-gen4/meta-aos-rcar-gen4-dom0"
++        - "../meta-aos-rcar-gen4/meta-aos-rcar-gen4-domx"
++        - "../meta-aos-rcar-gen4/meta-aos-rcar-gen4-control-domain"
++        - "../meta-aos"
++      build_target: core-image-thin-initramfs
++      external_src:
++        domd: "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/"
++      additional_deps:
++        - "%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/Image"
++      target_images:
++        - "tmp/deploy/images/generic-armv8-xt/Image"
++        - "tmp/deploy/images/generic-armv8-xt/uInitramfs"
++        - "tmp/deploy/images/generic-armv8-xt/aos/version"
++  domd:
++    build-dir: "%{YOCTOS_WORK_DIR}"
++    sources:
++      - *COMMON_SOURCES
++      - type: git
++        url: https://github.com/renesas-rcar/meta-renesas.git
++        rev: "348924c"
++      - type: git
++        url: git://git.yoctoproject.org/meta-selinux
++        rev: "46bcf05"
++      - type: git
++        url: "git://git.yoctoproject.org/meta-security"
++        rev: "c62970f"
++      - type: git
++        url: https://github.com/aoscloud/meta-aos.git
++        rev: "v6.0.2"
++    builder:
++      type: yocto
++      work_dir: "%{DOMD_BUILD_DIR}"
++      conf:
++        - *COMMON_CONF
++        - *DOMD_DOMU_CONF
++        - [XT_DOM_NAME, "domd"]
++        - [XT_DEVICE_TREES, "%{XT_DOMD_DTB_NAME} %{XT_XEN_DTB_NAME}"]
++        - [IMAGE_INSTALL_append, " iperf3"]
++
++        # Enable seccomp for crun
++        - [DISTRO_FEATURES_append, " seccomp"]
++
++        # Initramfs configuration
++        - [INITRAMFS_IMAGE, "core-image-tiny-initramfs"]
++        - [INITRAMFS_IMAGE_BUNDLE, "0"]
++        - [INITRAMFS_FSTYPES, "cpio.gz"]
++
++        # Do not install kernel image to rootfs to decrease initrd size
++        - ["RDEPENDS_${KERNEL_PACKAGE_NAME}-base", ""]
++
++        # Aos config
++        - [VIS_DATA_PROVIDER, "%{AOS_VIS_DATA_PROVIDER}"]
++
++      build_target: rcar-image-minimal
++      layers:
++        - "../poky/meta"
++        - "../poky/meta-poky"
++        - "../poky/meta-yocto-bsp"
++        - "../meta-virtualization"
++        - "../meta-selinux"
++        - "../meta-security"
++        - "../meta-openembedded/meta-oe"
++        - "../meta-openembedded/meta-networking"
++        - "../meta-openembedded/meta-perl"
++        - "../meta-openembedded/meta-python"
++        - "../meta-openembedded/meta-filesystems"
++        - "../meta-arm/meta-arm"
++        - "../meta-arm/meta-arm-toolchain"
++        - "../meta-aos"
++        - "../meta-renesas/meta-rcar-gateway"
++        - "../meta-xt-common/meta-xt-domx"
++        - "../meta-xt-common/meta-xt-driver-domain"
++        - "../meta-aos-rcar-gen4/meta-aos-rcar-gen4-domd"
++        - "../meta-aos-rcar-gen4/meta-aos-rcar-gen4-domx"
++        - "../meta-aos-rcar-gen4/meta-aos-rcar-gen4-driver-domain"
++      target_images:
++        - "tmp/deploy/images/%{MACHINE}/Image"
++        - "tmp/deploy/images/%{MACHINE}/xen-%{MACHINE}.uImage"
++        - "tmp/deploy/images/%{MACHINE}/xenpolicy-%{MACHINE}"
++        - "tmp/deploy/images/%{MACHINE}/%{XT_XEN_DTB_NAME}"
++        - "tmp/deploy/images/%{MACHINE}/rcar-image-minimal-s4sk-proto.ext4"
++        - "tmp/work/%{MACHINE}-poky-linux/rcar-image-minimal/1.0-r0/rootfs/var/aos/.unprovisioned"
++  domu:
++    build-dir: "%{YOCTOS_WORK_DIR}"
++    sources:
++      - *COMMON_SOURCES
++      - type: git
++        url: https://github.com/renesas-rcar/meta-renesas.git
++        rev: "348924c"
++    builder:
++      type: yocto
++      work_dir: "%{DOMU_BUILD_DIR}"
++      conf:
++        - *COMMON_CONF
++        - *DOMD_DOMU_CONF
++        - [XT_DOM_NAME, "domu"]
++        - [IMAGE_INSTALL_append, " iperf3 "]
++
++      layers:
++        - "../meta-openembedded/meta-oe"
++        - "../meta-openembedded/meta-filesystems"
++        - "../meta-openembedded/meta-python"
++        - "../meta-arm/meta-arm"
++        - "../meta-arm/meta-arm-toolchain"
++        - "../meta-renesas/meta-rcar-gateway"
++        - "../meta-xt-common/meta-xt-domu"
++        - "../meta-aos-rcar-gen4/meta-aos-rcar-gen4-domx"
++        - "../meta-aos-rcar-gen4/meta-aos-rcar-gen4-domu"
++      build_target: rcar-image-minimal
++      target_images:
++        - "tmp/deploy/images/%{MACHINE}/Image"
++        - "tmp/deploy/images/%{MACHINE}/rcar-image-minimal-s4sk-proto.ext4"
++
++images:
++  full:
++    type: gpt
++    desc: "Full SD-card/eMMC image"
++    partitions:
++      boot_a:
++        gpt_type: 21686148-6449-6E6F-744E-656564454649 # BIOS boot partition (kinda...)
++        type: ext4
++        size: 128 MiB
++        files:
++          "version": "%{YOCTOS_WORK_DIR}/build-dom0/tmp/deploy/images/generic-armv8-xt/aos/version"
++          "Image": "%{YOCTOS_WORK_DIR}/build-dom0/tmp/deploy/images/generic-armv8-xt/Image"
++          "uInitramfs": "%{YOCTOS_WORK_DIR}/build-dom0/tmp/deploy/images/generic-armv8-xt/uInitramfs"
++          "xen": "%{YOCTOS_WORK_DIR}/build-domd/tmp/deploy/images/%{MACHINE}/xen-%{MACHINE}.uImage"
++          "xenpolicy": "%{YOCTOS_WORK_DIR}/build-domd/tmp/deploy/images/%{MACHINE}/xenpolicy-%{MACHINE}"
++          "xen.dtb": "%{YOCTOS_WORK_DIR}/build-domd/tmp/deploy/images/%{MACHINE}/%{XT_XEN_DTB_NAME}"
++      boot_b:
++        gpt_type: 21686148-6449-6E6F-744E-656564454649 # BIOS boot partition (kinda...)
++        type: ext4
++        size: 128 MiB
++        files:
++          "version": "%{YOCTOS_WORK_DIR}/build-dom0/tmp/deploy/images/generic-armv8-xt/aos/version"
++          "Image": "%{YOCTOS_WORK_DIR}/build-dom0/tmp/deploy/images/generic-armv8-xt/Image"
++          "uInitramfs": "%{YOCTOS_WORK_DIR}/build-dom0/tmp/deploy/images/generic-armv8-xt/uInitramfs"
++          "xen": "%{YOCTOS_WORK_DIR}/build-domd/tmp/deploy/images/%{MACHINE}/xen-%{MACHINE}.uImage"
++          "xenpolicy": "%{YOCTOS_WORK_DIR}/build-domd/tmp/deploy/images/%{MACHINE}/xenpolicy-%{MACHINE}"
++          "xen.dtb": "%{YOCTOS_WORK_DIR}/build-domd/tmp/deploy/images/%{MACHINE}/%{XT_XEN_DTB_NAME}"
++      boot_env:
++        gpt_type: 21686148-6449-6E6F-744E-656564454649 # BIOS boot partition (kinda...)
++        type: vfat
++        size: 16 MiB
++      domd_rootfs:
++        gpt_type: B921B045-1DF0-41C3-AF44-4C6F280D3FAE # Linux aarch64 root
++        type: raw_image
++        size: 1024 MiB
++        image_path: "%{YOCTOS_WORK_DIR}/build-domd/tmp/deploy/images/%{MACHINE}/rcar-image-minimal-s4sk-proto.ext4"
++      domd_var:
++        gpt_type: B921B045-1DF0-41C3-AF44-4C6F280D3FAE # Linux aarch64 root
++        type: ext4
++        size: 512 MiB
++        files:
++          ".unprovisioned": "%{YOCTOS_WORK_DIR}/build-domd/tmp/work/%{MACHINE}-poky-linux/rcar-image-minimal/1.0-r0/rootfs/var/aos/.unprovisioned"
++      domd_aos:
++        gpt_type: CA7D7CCB-63ED-4C53-861C-1742536059CC # LUKS partition
++        type: empty
++        size: 1024 MiB
++parameters:
++  ENABLE_DOMU:
++    desc: "Build generic Yocto-based DomU"
++    "no":
++      default: true
++    "yes":
++      overrides:
++        variables:
++          XT_GENERIC_DOMU_TAG: "domu"
++        components:
++          dom0:
++            builder:
++              additional_deps:
++                - "%{DOMU_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/Image"
++              external_src:
++                domu: "%{YOCTOS_WORK_DIR}/%{DOMU_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/"
++        images:
++          full:
++            partitions:
++              domu-rootfs:
++                type: raw_image
++                gpt_type: 0FC63DAF-8483-4772-8E79-3D69D8477DE4 # Linux filesystem data
++                image_path: "%{YOCTOS_WORK_DIR}/%{DOMU_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/rcar-image-minimal-s4sk-proto.ext4"
++
++  # Aos VIS data provider
++  VIS_DATA_PROVIDER:
++    desc: "Sepecifies plugin for VIS automotive data"
++    renesassimulator:
++      default: true
++      overrides:
++        variables:
++          AOS_VIS_DATA_PROVIDER: "renesassimulatoradapter"
++
++    telemetryemulator:
++      overrides:
++        variables:
++          AOS_VIS_DATA_PROVIDER: "telemetryemulatoradapter"
+diff --git a/meta-aos-rcar-gen4-control-domain/recipes-guests/domd/domd.bbappend b/meta-aos-rcar-gen4-control-domain/recipes-guests/domd/domd.bbappend
+index 7398000..d22526b 100644
+--- a/meta-aos-rcar-gen4-control-domain/recipes-guests/domd/domd.bbappend
++++ b/meta-aos-rcar-gen4-control-domain/recipes-guests/domd/domd.bbappend
+@@ -25,5 +25,5 @@ do_install_append() {
+     install -m 0644 ${WORKDIR}/domd-override.conf ${D}${sysconfdir}/systemd/system/domd.service.d
+ 
+     # Install domd initramfs
+-    install -m 0644 ${S}/core-image-tiny-initramfs-spider.cpio.gz ${D}${libdir}/xen/boot/initramfs-domd
++    install -m 0644 ${S}/core-image-tiny-initramfs-${XT_DOMD_MACHINE}.cpio.gz ${D}${libdir}/xen/boot/initramfs-domd
+ }
+diff --git a/meta-aos-rcar-gen4-control-domain/recipes-guests/domd/files/domd-s4sk-proto.cfg b/meta-aos-rcar-gen4-control-domain/recipes-guests/domd/files/domd-s4sk-proto.cfg
+new file mode 100644
+index 0000000..f3bfbfc
+--- /dev/null
++++ b/meta-aos-rcar-gen4-control-domain/recipes-guests/domd/files/domd-s4sk-proto.cfg
+@@ -0,0 +1,251 @@
++# =====================================================================
++# DomD guest configuration
++# =====================================================================
++
++seclabel='system_u:system_r:domD_t'
++
++# Guest name
++name = "DomD"
++
++# Kernel image to boot
++kernel = "/usr/lib/xen/boot/linux-domd"
++
++device_tree = "/usr/lib/xen/boot/domd.dtb"
++
++extra = "root=/dev/STORAGE_PART2 rw rootwait console=hvc0 clk_ignore_unused"
++
++# Initial memory allocation (MB)
++memory = 1024
++
++# Number of VCPUS
++vcpus = 4
++
++on_crash = 'preserve'
++
++tee = "optee"
++
++# This is autogenerated config part
++
++dt_compatible = [ "renesas,s4sk-prototype", "renesas,r8a779f0" ]
++
++# Clocks and regulators are needed and are in the device tree root,
++# but we do not want to copy all root nodes: handle these one by one
++dt_passthrough_nodes = [
++    "/extal",
++    "/extalr",
++    "/msiof-ref-clock",
++    "/pcie_bus",
++    "/scif",
++    "/soc",
++    "/regulator-1p8v",
++    "/regulator-3p3v",
++    "/regulator-vcc-sdhi",
++    "/reserved-memory",
++]
++
++dtdev = [
++    "/soc/dma-controller@e7350000",
++    "/soc/dma-controller@e7351000",
++    "/soc/mmc@ee140000",
++    "/soc/ethernet@e68c0000",
++    "/soc/pcie@e65d0000",
++]
++
++irqs = [
++# gpio@e6050180
++    854,
++# gpio@e6050980
++    855,
++# gpio@e6051180
++    856,
++# gpio@e6051980
++    857,
++# i2c@e6500000
++    270,
++# i2c@e66e0000
++    275,
++# serial@e6550000
++    278,
++# serial@e6e60000
++    281,
++# serial@e6c50000 - used by Xen
++#    284,
++# dma-controller@e7350000
++    133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149,
++# dma-controller@e7351000
++    151, 158, 157, 152, 179, 180, 181, 182, 183, 184, 185, 186, 155, 156, 154, 153, 159,
++# mmc@ee140000
++    268,
++# dma-controller@ffd60000
++    64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 61, 62, 63,
++# dma-controller@ffd61000
++    79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95,
++# dma-controller@ffd62000
++    97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113,
++# dma-controller@ffd63000
++    128, 129, 130, 131, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127,
++# pcie@e65d0000
++    448, 449, 450, 451, 452, 453, 454,
++# mfis@e6260000
++    352,
++# iccom01
++    354,
++# iccom02
++    356,
++# iccom03
++    358,
++# iccom04
++    360,
++# iccom05
++    362,
++# iccom06
++    364,
++# iccom07
++    366,
++# iccom016
++    386,
++# iccom017
++    388,
++# iccom018
++    390,
++# iccom019
++    392,
++# iccom020
++    394,
++# iccom021
++    396,
++# iccom022
++    398,
++# iccom023
++    400,
++# ethernet@e68c0000
++    312, 313, 314, 315, 316, 317, 318, 319, 320, 321,
++    322, 323, 324, 325, 326, 327, 328, 329, 330, 331,
++]
++
++iomem = [
++#watchdog@e6020000
++    "e6020,1",
++#pin-controller@e6050000
++#pin-controller@e6050000
++#gpio@e6050180
++#gpio@e6050980
++    "e6050,1",
++#pin-controller@e6050000
++#pin-controller@e6050000
++#gpio@e6051180
++#gpio@e6051980
++    "e6051,1",
++#pin-controller@e6050000
++#pin-controller@e6050000
++    "dfd90,1",
++#pin-controller@e6050000
++#pin-controller@e6050000
++    "dfd91,1",
++#clock-controller@e6150000
++    "e6150,4",
++#reset-controller@e6160000
++    "e6160,4",
++#system-controller@e6180000
++    "e6180,4",
++#i2c@e6500000
++    "e6500,1",
++#i2c@e66e0000
++    "e66e0,1",
++#ethernet@e68c0000
++    "e68c0,20",
++#ethernet@e68c0000
++    "e6444,3",
++#serial@e6550000
++    "e6550,1",
++#serial@e6e60000
++    "e6e60,1",
++#serial@e6c50000 - used by Xen
++#    "e6c50,1",
++#dma-controller@e7350000
++    "e7350,1",
++#dma-controller@e7350000
++    "e7300,10",
++#dma-controller@e7351000
++    "e7351,1",
++#dma-controller@e7351000
++    "e7310,10",
++#mmc@ee140000
++    "ee140,2",
++#interrupt-controller@f1000000 - used by Xen
++#    "f1000,20",
++#interrupt-controller@f1000000 - used by Xen
++#    "f1060,110",
++#chipid@fff00044
++    "fff00,1",
++#dma-controller@ffd60000
++    "ffd60,1",
++#dma-controller@ffd60000
++    "ffc10,10",
++#dma-controller@ffd61000
++    "ffd61,1",
++#dma-controller@ffd61000
++    "ffc20,10",
++#dma-controller@ffd62000
++    "ffd62,1",
++#dma-controller@ffd62000
++    "ffd70,10",
++#dma-controller@ffd63000
++    "ffd63,1",
++#dma-controller@ffd63000
++    "ffd80,10",
++#pcie@e65d0000 - trapped by vPCI code: "dbi"
++#    "e65d0,3",
++#pcie@e65d0000
++    "e65d3,2",
++#pcie@e65d0000
++    "e65d5,2",
++#pcie@e65d0000
++    "e65d6,1",
++#pcie@e65d0000
++    "e65d7,1",
++#pcie@e65d0000 - trapped by vPCI code: "config"
++#    "fe000,10",
++#thermal@e6198000
++    "e6198,1",
++    "e61a0,1",
++    "e61a8,1",
++    "e61b0,1",
++#mfis@e6260000
++#iccom01
++#iccom02
++#iccom03
++#iccom04
++#iccom05
++#iccom06
++#iccom07
++#iccom08
++#iccom09
++#iccom010
++#iccom011
++#iccom012
++#iccom013
++#iccom014
++#iccom015
++#iccom100
++#iccom101
++#iccom102
++#iccom103
++#iccom104
++#iccom105
++#iccom106
++#iccom107
++#iccom108
++#iccom109
++#iccom110
++#iccom111
++#iccom112
++#iccom113
++#iccom114
++#iccom115
++    "e6260,10",
++#iccom shared memory (CTA) - CR52
++    "47fc7,2@37fc7",
++]
++
++# End of autogenerated config part
+diff --git a/meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu-s4sk-proto.cfg b/meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu-s4sk-proto.cfg
+new file mode 100644
+index 0000000..82e1b2b
+--- /dev/null
++++ b/meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu-s4sk-proto.cfg
+@@ -0,0 +1,69 @@
++# =====================================================================
++# DomD guest configuration
++# =====================================================================
++
++seclabel='system_u:system_r:domU_t'
++
++# Uncomment the next two lines to pass PCI device to DomU
++
++# vpci="ecam"
++# pci=["01:00.2,seize=1"]
++
++# Guest name
++name = "DomU"
++
++# Kernel image to boot
++kernel = "/usr/lib/xen/boot/linux-domu"
++
++device_tree = "/usr/lib/xen/boot/domu.dtb"
++
++extra = "root=/dev/xvda1 rw rootwait console=hvc0"
++
++# Initial memory allocation (MB)
++memory = 512
++
++# Number of VCPUS
++vcpus = 2
++
++tee = "optee"
++
++on_crash = 'preserve'
++
++dt_passthrough_nodes = [
++    "/reserved-memory",
++]
++
++dtdev = ["/soc/rswitch_osid1"]
++
++irqs = [
++# iccom08
++    368,
++# iccom09
++    370,
++# iccom010
++    372,
++# iccom011
++    374,
++# iccom012
++    376,
++# iccom013
++    378,
++# iccom014
++    380,
++# iccom015
++    382,
++]
++
++iomem = [
++#iccom08
++#iccom09
++#iccom11
++#iccom12
++#iccom13
++#iccom14
++#iccom15
++#iccom16
++    "e6260,10",
++#iccom shared memory (CTA) - G4MH
++    "47fc9,2@37fc9",
++]
+diff --git a/meta-aos-rcar-gen4-dom0/recipes-kernel/linux/linux-generic-armv8.bbappend b/meta-aos-rcar-gen4-dom0/recipes-kernel/linux/linux-generic-armv8.bbappend
+index 75c2aa1..eea6ca9 100644
+--- a/meta-aos-rcar-gen4-dom0/recipes-kernel/linux/linux-generic-armv8.bbappend
++++ b/meta-aos-rcar-gen4-dom0/recipes-kernel/linux/linux-generic-armv8.bbappend
+@@ -1,10 +1,10 @@
+ FILESEXTRAPATHS_prepend := "${THISDIR}/${PN}:"
+ 
+-BRANCH = "v5.10.41/rcar-5.1.7.rc3"
++BRANCH = "v5.10.41/rcar-5.1.7.rc6"
+ SRCREV = "${AUTOREV}"
+ LINUX_VERSION = "5.10.41"
+ 
+ SRC_URI = "\
+-    git://github.com/renesas-rcar/linux-bsp.git;branch=${BRANCH} \
++    git://github.com/renesas-rcar/linux-bsp.git;branch=${BRANCH};protocol=https \
+     file://defconfig \
+ "
+diff --git a/meta-aos-rcar-gen4-domd/recipes-bsp/u-boot/files/0001-net-tftp-Fix-incorrect-tftp_next_ack-on-no-OACK.patch b/meta-aos-rcar-gen4-domd/recipes-bsp/u-boot/files/0001-net-tftp-Fix-incorrect-tftp_next_ack-on-no-OACK.patch
+deleted file mode 100644
+index b73fbe9..0000000
+--- a/meta-aos-rcar-gen4-domd/recipes-bsp/u-boot/files/0001-net-tftp-Fix-incorrect-tftp_next_ack-on-no-OACK.patch
++++ /dev/null
+@@ -1,37 +0,0 @@
+-From 00e7c26db822ee66e69d26758470e07f627e858d Mon Sep 17 00:00:00 2001
+-From: Harm Berntsen <harm.berntsen@nedap.com>
+-Date: Fri, 27 Nov 2020 21:45:56 +0000
+-Subject: [PATCH] net: tftp: Fix incorrect tftp_next_ack on no OACK
+-
+-When the tftp server did not send any OACK, the tftp_next_ack variable
+-was not set to the correct value . As the server was transmitting
+-blocks we generated a lot of 'Received unexpected block: $n, expected
+-$n+1' error messages. Depending on the timeout setting the transfer
+-could still complete though.
+-
+-Signed-off-by: Harm Berntsen <harm.berntsen@nedap.com>
+-CC: Ramon Fried <rfried.dev@gmail.com>
+-Reviewed-By: Ramon Fried <rfried.dev@gmail.com>
+----
+- net/tftp.c | 4 +++-
+- 1 file changed, 3 insertions(+), 1 deletion(-)
+-
+-diff --git a/net/tftp.c b/net/tftp.c
+-index 84e970bec1..505aa9e357 100644
+---- a/net/tftp.c
+-+++ b/net/tftp.c
+-@@ -621,8 +621,10 @@ static void tftp_handler(uchar *pkt, unsigned dest, struct in_addr sip,
+- 		tftp_cur_block++;
+- 		tftp_cur_block %= TFTP_SEQUENCE_SIZE;
+- 
+--		if (tftp_state == STATE_SEND_RRQ)
+-+		if (tftp_state == STATE_SEND_RRQ) {
+- 			debug("Server did not acknowledge any options!\n");
+-+			tftp_next_ack = tftp_windowsize;
+-+		}
+- 
+- 		if (tftp_state == STATE_SEND_RRQ || tftp_state == STATE_OACK ||
+- 		    tftp_state == STATE_RECV_WRQ) {
+--- 
+-2.33.0
+-
+diff --git a/meta-aos-rcar-gen4-domd/recipes-bsp/u-boot/u-boot_2020.10.bbappend b/meta-aos-rcar-gen4-domd/recipes-bsp/u-boot/u-boot_2020.10.bbappend
+deleted file mode 100644
+index 94a8682..0000000
+--- a/meta-aos-rcar-gen4-domd/recipes-bsp/u-boot/u-boot_2020.10.bbappend
++++ /dev/null
+@@ -1,8 +0,0 @@
+-FILESEXTRAPATHS_prepend := "${THISDIR}/files:"
+-
+-BRANCH = "v2020.10/rcar-5.1.1.rc2"
+-SRCREV = "3ec5cec05015d8b290a8d390b0246e1df3865199"
+-
+-SRC_URI_+= " \
+-    file://0001-net-tftp-Fix-incorrect-tftp_next_ack-on-no-OACK.patch \
+-"
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-PCIe-MSI-support.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-PCIe-MSI-support.patch
+index dc6b8b6..21ceb8c 100644
+--- a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-PCIe-MSI-support.patch
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-PCIe-MSI-support.patch
+@@ -1,39 +1,55 @@
+-From 06941ebb2ecaefebb858940d7681afc45ddf2460 Mon Sep 17 00:00:00 2001
+-From: Oleksandr Andrushchenko <oleksandr_andrushchenko@epam.com>
+-Date: Wed, 19 Jan 2022 08:54:46 +0200
+-Subject: [PATCH] PCIe/MSI support
++From 15c4757f060a244af18efd26d9c4fc17ec8d3ca3 Mon Sep 17 00:00:00 2001
++From: vudang <vu.dang.te@renasas.com>
++Date: Thu, 1 Dec 2022 20:54:06 +0700
++Subject: [PATCH 1/4] PCIe/MSI support
+ 
+ ITS part is left untouched as ITS is handled by Xen.
+ 
+ Signed-off-by: Yoshihiro Shimoda <yoshihiro.shimoda.uh@renesas.com>
+ Signed-off-by: Oleksandr Andrushchenko <oleksandr_andrushchenko@epam.com>
++Signed-off-by: vudang <vu.dang.te@renasas.com>
++Signed-off-by: Dung Nguyen <dung.nguyen.zy@renesas.com>
+ ---
++ .../dts/renesas/r8a779f0-s4sk-prototype.dts   |  2 +-
+  .../boot/dts/renesas/r8a779f0-spider.dts      |  2 +-
+  arch/arm64/boot/dts/renesas/r8a779f0.dtsi     | 21 +++++++++++++----
+  arch/arm64/configs/defconfig                  |  1 +
+  drivers/misc/pci_endpoint_test.c              |  6 +++++
+  .../pci/controller/dwc/pcie-designware-host.c | 12 +++++++++-
+  drivers/pci/controller/dwc/pcie-renesas.c     | 23 +++++++++++++++++++
+- 6 files changed, 58 insertions(+), 7 deletions(-)
++ 7 files changed, 59 insertions(+), 8 deletions(-)
+ 
++diff --git a/arch/arm64/boot/dts/renesas/r8a779f0-s4sk-prototype.dts b/arch/arm64/boot/dts/renesas/r8a779f0-s4sk-prototype.dts
++index 04d9a2a83368..c2f1f4cf00f0 100644
++--- a/arch/arm64/boot/dts/renesas/r8a779f0-s4sk-prototype.dts
+++++ b/arch/arm64/boot/dts/renesas/r8a779f0-s4sk-prototype.dts
++@@ -248,7 +248,7 @@
++ 
++ &pciec0 {
++ 	status = "okay";
++-	pinctrl-0 = <&pcie0_pins>;
+++	pinctrl-0 = <&pcie0_pins>, <&pcie1_pins>;
++ 	pinctrl-names = "default";
++ 	clkreq-gpios = <&gpio2 15 GPIO_ACTIVE_LOW>;
++ };
+ diff --git a/arch/arm64/boot/dts/renesas/r8a779f0-spider.dts b/arch/arm64/boot/dts/renesas/r8a779f0-spider.dts
+-index 04909efdfb75..064cc13d517a 100644
++index 2f0d6bdb1061..da4c47ec3029 100644
+ --- a/arch/arm64/boot/dts/renesas/r8a779f0-spider.dts
+ +++ b/arch/arm64/boot/dts/renesas/r8a779f0-spider.dts
+-@@ -138,7 +138,7 @@ &pcie_bus_clk {
++@@ -138,7 +138,7 @@
+  
+  &pciec0 {
+  	status = "okay";
+ -	pinctrl-0 = <&pcie0_pins>;
+ +	pinctrl-0 = <&pcie0_pins>, <&pcie1_pins>;
+  	pinctrl-names = "default";
++ 	clkreq-gpios = <&gpio2 15 GPIO_ACTIVE_LOW>;
+  };
+- 
+ diff --git a/arch/arm64/boot/dts/renesas/r8a779f0.dtsi b/arch/arm64/boot/dts/renesas/r8a779f0.dtsi
+-index 4583fb1d87e2..1a3d5dc63540 100644
++index 3982ec780143..b0fae511026c 100644
+ --- a/arch/arm64/boot/dts/renesas/r8a779f0.dtsi
+ +++ b/arch/arm64/boot/dts/renesas/r8a779f0.dtsi
+-@@ -853,12 +853,21 @@ mmc0: mmc@ee140000 {
++@@ -853,12 +853,21 @@
+  		gic: interrupt-controller@f1000000 {
+  			compatible = "arm,gic-v3";
+  			#interrupt-cells = <3>;
+@@ -56,7 +72,7 @@ index 4583fb1d87e2..1a3d5dc63540 100644
+  		};
+  
+  		prr: chipid@fff00044 {
+-@@ -1062,7 +1071,7 @@ pciec0: pcie@e65d0000 {
++@@ -1064,7 +1073,7 @@
+  			      <0 0xe65d5000 0 0x1200>,
+  			      <0 0xe65d6200 0 0x0e00>,
+  			      <0 0xe65d7000 0 0x1000>,
+@@ -65,7 +81,7 @@ index 4583fb1d87e2..1a3d5dc63540 100644
+  			reg-names = "dbi",
+  				    "atu",
+  				    "dma",
+-@@ -1074,7 +1083,7 @@ pciec0: pcie@e65d0000 {
++@@ -1076,7 +1085,7 @@
+  			bus-range = <0x00 0xff>;
+  			device_type = "pci";
+  				 /* downstream IO */
+@@ -74,7 +90,7 @@ index 4583fb1d87e2..1a3d5dc63540 100644
+  				 /* non-prefetchable memory */
+  				  0x82000000 0 0x30000000 0 0x30000000 0 0x10000000>;
+  				     /* Map all possible DDR as inbound ranges */
+-@@ -1089,6 +1098,7 @@ pciec0: pcie@e65d0000 {
++@@ -1091,6 +1100,7 @@
+  			interrupt-names = "msi", "dma", "err", "fatal",
+  					  "nonfatal", "lp", "vndmsg";
+  			#interrupt-cells = <1>;
+@@ -82,16 +98,16 @@ index 4583fb1d87e2..1a3d5dc63540 100644
+  			interrupt-map-mask = <0 0 0 7>;
+  			interrupt-map = <0 0 0 1 &gic GIC_SPI 416 IRQ_TYPE_LEVEL_HIGH
+  					 0 0 0 2 &gic GIC_SPI 416 IRQ_TYPE_LEVEL_HIGH
+-@@ -1145,7 +1155,7 @@ pciec1: pcie@e65d8000 {
++@@ -1147,7 +1157,7 @@
+  			      <0 0xe65dd000 0 0x1200>,
+  			      <0 0xe65de200 0 0x0e00>,
+  			      <0 0xe65df000 0 0x1000>,
+--			      <0 0xee900000 0 0x10000>;
+-+			      <0 0xee900000 0 0x400000>;
++-			      <0 0xee900000 0 0x10000>,
+++			      <0 0xee900000 0 0x400000>,
++ 			      <0 0xe65d6200 0 0x0e00>;
+  			reg-names = "dbi",
+  				    "atu",
+- 				    "dma",
+-@@ -1157,7 +1167,7 @@ pciec1: pcie@e65d8000 {
++@@ -1161,7 +1171,7 @@
+  			bus-range = <0x00 0xff>;
+  			device_type = "pci";
+  				 /* downstream IO */
+@@ -100,7 +116,7 @@ index 4583fb1d87e2..1a3d5dc63540 100644
+  				 /* non-prefetchable memory */
+  				 0x82000000 0 0xc0000000 0 0xc0000000 0 0x10000000>;
+  				     /* Map all possible DDR as inbound ranges */
+-@@ -1172,6 +1182,7 @@ pciec1: pcie@e65d8000 {
++@@ -1176,6 +1186,7 @@
+  			interrupt-names = "msi", "dma", "err", "fatal",
+  					  "nonfatal", "lp", "vndmsg";
+  			#interrupt-cells = <1>;
+@@ -109,7 +125,7 @@ index 4583fb1d87e2..1a3d5dc63540 100644
+  			interrupt-map = <0 0 0 1 &gic GIC_SPI 423 IRQ_TYPE_LEVEL_HIGH
+  					 0 0 0 2 &gic GIC_SPI 423 IRQ_TYPE_LEVEL_HIGH
+ diff --git a/arch/arm64/configs/defconfig b/arch/arm64/configs/defconfig
+-index 5a5a39a64389..3e021519f050 100644
++index 2e6f354f0d9e..965df0650a29 100644
+ --- a/arch/arm64/configs/defconfig
+ +++ b/arch/arm64/configs/defconfig
+ @@ -239,6 +239,7 @@ CONFIG_PCIE_RENESAS_EP=n
+@@ -189,12 +205,12 @@ index 44c2a6572199..c7b4516b225c 100644
+  
+  			ret = dw_pcie_allocate_domains(pp);
+ diff --git a/drivers/pci/controller/dwc/pcie-renesas.c b/drivers/pci/controller/dwc/pcie-renesas.c
+-index bf19c671f169..c06a7a9a3781 100644
++index ad0b43ec0a16..2c8b3d8bc9bd 100644
+ --- a/drivers/pci/controller/dwc/pcie-renesas.c
+ +++ b/drivers/pci/controller/dwc/pcie-renesas.c
+-@@ -54,6 +54,18 @@
+- #define PRTLGC5			0x0714
+- #define INSERT_LANE_SKEW	BIT(6)
++@@ -83,6 +83,18 @@
++ #define CFG_SYS_ERR_RC          GENMASK(10, 9)
++ #define CFG_SAFETY_UNCORR_CORR  GENMASK(5, 4)
+  
+ +#define AXIINTCADDR		0x0a00	/* 0x6c00 */
+ +#define AXIINTCADDR_VAL		0xf1050040	/* FIXME */
+@@ -211,7 +227,7 @@ index bf19c671f169..c06a7a9a3781 100644
+  /* PCI Shadow offset */
+  #define SHADOW_REG(x)		(0x2000 + (x))
+  /* BAR Mask registers */
+-@@ -179,6 +191,13 @@ static int renesas_pcie_host_init(struct pcie_port *pp)
++@@ -244,6 +256,13 @@ static int renesas_pcie_host_init(struct pcie_port *pp)
+  	return 0;
+  }
+  
+@@ -225,7 +241,7 @@ index bf19c671f169..c06a7a9a3781 100644
+  static void renesas_pcie_set_num_vectors(struct pcie_port *pp)
+  {
+  	pp->num_vectors = MAX_MSI_IRQS;
+-@@ -230,6 +249,10 @@ static void renesas_pcie_init_rc(struct renesas_pcie *pcie)
++@@ -295,6 +314,10 @@ static void renesas_pcie_init_rc(struct renesas_pcie *pcie)
+  	val |= DEVICE_TYPE_RC;
+  	renesas_pcie_writel(pcie, PCIEMSR0, val);
+  
+@@ -233,9 +249,9 @@ index bf19c671f169..c06a7a9a3781 100644
+ +	renesas_pcie_writel(pcie, AXIINTCADDR, AXIINTCADDR_VAL);
+ +	renesas_pcie_writel(pcie, AXIINTCCONT, AXIINTCCONT_VAL);
+ +
+- 	/* Enable DBI read-only registers for writing */
+- 	dw_pcie_dbi_ro_wr_en(pci);
+- 
++ 	if (pcie->base_shared) {
++ 		clk_prepare_enable(pcie->clk_shared);
++ 		val = renesas_pcie_shared_readl(pcie, PCIEMSR0);
+ -- 
+-2.36.1
++2.17.1
+ 
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-clk-shmobile-Hide-clock-for-scif3-and-hscif0.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-clk-shmobile-Hide-clock-for-scif3-and-hscif0.patch
+index 689ae19..369a696 100644
+--- a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-clk-shmobile-Hide-clock-for-scif3-and-hscif0.patch
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-clk-shmobile-Hide-clock-for-scif3-and-hscif0.patch
+@@ -1,6 +1,6 @@
+-From 7933e99643e394fe597c788404b527916add74be Mon Sep 17 00:00:00 2001
+-From: Oleksandr Andrushchenko <oleksandr_andrushchenko@epam.com>
+-Date: Tue, 19 Oct 2021 13:59:39 +0300
++From 579a09211c81979fb37ea16de4bf26deaa803ef8 Mon Sep 17 00:00:00 2001
++From: vudang <vu.dang.te@renasas.com>
++Date: Thu, 1 Dec 2022 20:34:23 +0700
+ Subject: [PATCH] clk:shmobile: Hide clock for scif3 and hscif0
+ 
+ Either scif3 or hscif0 serial port is used by Xen, so do
+@@ -8,33 +8,33 @@ not let the kernel to manage it.
+ 
+ Signed-off-by: Oleksandr Andrushchenko <oleksandr_andrushchenko@epam.com>
+ Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
+-
++Signed-off-by: vudang <vu.dang.te@renasas.com>
+ ---
+  drivers/clk/renesas/r8a779f0-cpg-mssr.c | 4 ++++
+  1 file changed, 4 insertions(+)
+ 
+ diff --git a/drivers/clk/renesas/r8a779f0-cpg-mssr.c b/drivers/clk/renesas/r8a779f0-cpg-mssr.c
+-index d34a39c3f7f7..084cd5ee4e47 100644
++index 14bb80d3e15a..87cb6ea1f745 100644
+ --- a/drivers/clk/renesas/r8a779f0-cpg-mssr.c
+ +++ b/drivers/clk/renesas/r8a779f0-cpg-mssr.c
+-@@ -120,7 +120,9 @@ static const struct cpg_core_clk r8a779f0_core_clks[] __initconst = {
++@@ -123,7 +123,9 @@ static const struct cpg_core_clk r8a779f0_core_clks[] __initconst = {
+  };
+  
+  static const struct mssr_mod_clk r8a779f0_mod_clks[] __initconst = {
+ +#ifndef CONFIG_XEN
+- 	DEF_MOD("hscif0",	514,	R8A779F0_CLK_S0D3),
++ 	DEF_MOD("hscif0",	514,	R8A779F0_CLK_SASYNCPERD1),
+ +#endif
+- 	DEF_MOD("hscif1",	515,	R8A779F0_CLK_S0D3),
+- 	DEF_MOD("hscif2",	516,	R8A779F0_CLK_S0D3),
+- 	DEF_MOD("hscif3",	517,	R8A779F0_CLK_S0D3),
+-@@ -143,7 +145,9 @@ static const struct mssr_mod_clk r8a779f0_mod_clks[] __initconst = {
++ 	DEF_MOD("hscif1",	515,	R8A779F0_CLK_SASYNCPERD1),
++ 	DEF_MOD("hscif2",	516,	R8A779F0_CLK_SASYNCPERD1),
++ 	DEF_MOD("hscif3",	517,	R8A779F0_CLK_SASYNCPERD1),
++@@ -145,7 +147,9 @@ static const struct mssr_mod_clk r8a779f0_mod_clks[] __initconst = {
+  	DEF_MOD("rtdm3",	701,	R8A779F0_CLK_S0D2),
+- 	DEF_MOD("scif0",	702,	R8A779F0_CLK_S0D12_PER),
+- 	DEF_MOD("scif1",	703,	R8A779F0_CLK_S0D12_PER),
++ 	DEF_MOD("scif0",	702,	R8A779F0_CLK_SASYNCPERD4),
++ 	DEF_MOD("scif1",	703,	R8A779F0_CLK_SASYNCPERD4),
+ +#ifndef CONFIG_XEN
+- 	DEF_MOD("scif3",	704,	R8A779F0_CLK_S0D12_PER),
++ 	DEF_MOD("scif3",	704,	R8A779F0_CLK_SASYNCPERD4),
+ +#endif
+- 	DEF_MOD("scif4",	705,	R8A779F0_CLK_S0D12_PER),
++ 	DEF_MOD("scif4",	705,	R8A779F0_CLK_SASYNCPERD4),
+  	DEF_MOD("sdhi0",	706,	R8A779F0_CLK_SD0),
+  	DEF_MOD("sydm1",	709,	R8A779F0_CLK_S0D3),
+ -- 
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0002-xen-pciback-allow-compiling-on-other-archs-than-x86.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0002-xen-pciback-allow-compiling-on-other-archs-than-x86.patch
+index 695eb2c..9924b57 100644
+--- a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0002-xen-pciback-allow-compiling-on-other-archs-than-x86.patch
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0002-xen-pciback-allow-compiling-on-other-archs-than-x86.patch
+@@ -1,4 +1,4 @@
+-From b6694322b2ee9f7d5467b249a1de109d56dbd7e7 Mon Sep 17 00:00:00 2001
++From 86057d7186733de6ba1f1de751b249e25ea34688 Mon Sep 17 00:00:00 2001
+ From: Oleksandr Andrushchenko <oleksandr_andrushchenko@epam.com>
+ Date: Thu, 28 Oct 2021 17:36:20 +0300
+ Subject: [PATCH 2/4] xen-pciback: allow compiling on other archs than x86
+@@ -445,5 +445,5 @@ index 000000000000..b8337cf85fd1
+ +
+ +#endif
+ -- 
+-2.36.1
++2.17.1
+ 
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0003-HACK-Allow-DomD-enumerate-PCI-devices.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0003-HACK-Allow-DomD-enumerate-PCI-devices.patch
+index 4faea13..b988a6c 100644
+--- a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0003-HACK-Allow-DomD-enumerate-PCI-devices.patch
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0003-HACK-Allow-DomD-enumerate-PCI-devices.patch
+@@ -1,4 +1,4 @@
+-From f5c0c6cb71bbc2bc21d10cf03e8fb1183e526f33 Mon Sep 17 00:00:00 2001
++From 9114adfec61623fdfa37a79d3efa247d77c21dcf Mon Sep 17 00:00:00 2001
+ From: Oleksandr Andrushchenko <oleksandr_andrushchenko@epam.com>
+ Date: Tue, 9 Nov 2021 15:25:44 +0200
+ Subject: [PATCH 3/4] HACK: Allow DomD enumerate PCI devices
+@@ -24,5 +24,5 @@ index 2c890f4f2cbc..5fbb8f40dc04 100644
+  	return bus_register_notifier(&pci_bus_type, &device_nb);
+  }
+ -- 
+-2.36.1
++2.17.1
+ 
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0004-HACK-pcie-renesas-emulate-reading-from-ECAM-under-Xe.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0004-HACK-pcie-renesas-emulate-reading-from-ECAM-under-Xe.patch
+index 80aa8ac..f64dc0a 100644
+--- a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0004-HACK-pcie-renesas-emulate-reading-from-ECAM-under-Xe.patch
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0004-HACK-pcie-renesas-emulate-reading-from-ECAM-under-Xe.patch
+@@ -1,6 +1,6 @@
+-From 88462ad413f47dbe66b8c45c0edfe8e206330f61 Mon Sep 17 00:00:00 2001
+-From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
+-Date: Wed, 25 May 2022 20:18:06 +0300
++From 0189af4cb5ee455778eb50b93f7c98f6b5e4ae4f Mon Sep 17 00:00:00 2001
++From: vudang <vu.dang.te@renasas.com>
++Date: Thu, 1 Dec 2022 21:01:12 +0700
+ Subject: [PATCH 4/4] [HACK] pcie: renesas; emulate reading from ECAM under Xen
+ 
+ If kernel is running as Xen guest, hypervisor will emulate ECAM
+@@ -8,12 +8,14 @@ spaces for us. Thus, we need to replace child_ops with ops
+ that access ECAM address space.
+ 
+ Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Signed-off-by: vudang <vu.dang.te@renasas.com>
++Signed-off-by: Dung Nguyen <dung.nguyen.zy@renesas.com>
+ ---
+- drivers/pci/controller/dwc/pcie-renesas.c | 27 +++++++++++++++++++++++
+- 1 file changed, 27 insertions(+)
++ drivers/pci/controller/dwc/pcie-renesas.c | 26 +++++++++++++++++++++++
++ 1 file changed, 26 insertions(+)
+ 
+ diff --git a/drivers/pci/controller/dwc/pcie-renesas.c b/drivers/pci/controller/dwc/pcie-renesas.c
+-index dda55696627f..d3f7d87e0c26 100644
++index 2c8b3d8bc9bd..7737e2aeb7f2 100644
+ --- a/drivers/pci/controller/dwc/pcie-renesas.c
+ +++ b/drivers/pci/controller/dwc/pcie-renesas.c
+ @@ -21,6 +21,7 @@
+@@ -21,10 +23,10 @@ index dda55696627f..d3f7d87e0c26 100644
+  #include <linux/pm_runtime.h>
+  #include <linux/reset.h>
+ +#include <xen/xen.h>
++ #include <linux/gpio/consumer.h>
+  
+  #include "../../pci.h"
+- #include "pcie-designware.h"
+-@@ -151,12 +152,38 @@ static const struct dw_pcie_ops dw_pcie_ops = {
++@@ -210,12 +211,37 @@ static const struct dw_pcie_ops dw_pcie_ops = {
+  	.link_up = renesas_pcie_link_up,
+  };
+  
+@@ -43,7 +45,6 @@ index dda55696627f..d3f7d87e0c26 100644
+ +	return base + (devfn << devfn_shift) + where;
+ +}
+ +
+-+
+ +static struct pci_ops renesas_xen_child_ops = {
+ +	.map_bus = renesas_xen_map_bus,
+ +	.read = pci_generic_config_read,
+@@ -64,5 +65,5 @@ index dda55696627f..d3f7d87e0c26 100644
+  
+  	dw_pcie_dbi_ro_wr_en(pci);
+ -- 
+-2.36.1
++2.17.1
+ 
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/l3offload.cfg b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/l3offload.cfg
+new file mode 100644
+index 0000000..5d4e6b5
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/l3offload.cfg
+@@ -0,0 +1,32 @@
++CONFIG_IPV6=y
++CONFIG_VLAN_8021Q=y
++CONFIG_NET_SCH_CBQ=y
++CONFIG_NET_SCH_HTB=y
++CONFIG_NET_SCH_HFSC=y
++CONFIG_NET_SCH_PRIO=y
++CONFIG_NET_SCH_MULTIQ=y
++CONFIG_NET_SCH_RED=y
++CONFIG_NET_SCH_SFB=y
++CONFIG_NET_SCH_SFQ=y
++CONFIG_NET_SCH_TEQL=y
++CONFIG_NET_SCH_TBF=y
++CONFIG_NET_SCH_CBS=y
++CONFIG_NET_SCH_ETF=y
++CONFIG_NET_SCH_TAPRIO=y
++CONFIG_NET_SCH_GRED=y
++CONFIG_NET_SCH_DSMARK=y
++CONFIG_NET_SCH_NETEM=y
++CONFIG_NET_SCH_MQPRIO=y
++CONFIG_NET_SCH_INGRESS=y
++CONFIG_NET_CLS_BASIC=y
++CONFIG_NET_CLS_ROUTE4=y
++CONFIG_NET_CLS_FW=y
++CONFIG_NET_CLS_U32=y
++CONFIG_NET_CLS_FLOWER=y
++CONFIG_NET_CLS_MATCHALL=y
++CONFIG_NET_ACT_GACT=y
++CONFIG_NET_ACT_MIRRED=y
++CONFIG_NET_ACT_PEDIT=y
++CONFIG_NET_ACT_VLAN=y
++CONFIG_NET_ACT_SKBMOD=y
++CONFIG_NET_ACT_GATE=y
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/r8a779f0-s4sk-proto-domd.dts b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/r8a779f0-s4sk-proto-domd.dts
+new file mode 100644
+index 0000000..b2df2cd
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/r8a779f0-s4sk-proto-domd.dts
+@@ -0,0 +1,124 @@
++#include "r8a779f0-s4sk-prototype.dts"
++
++/*
++ * The device tree compiler (DTC) is allocating the phandle from 1 to
++ * onwards. Reserve a high value for the GIC phandle.
++ */
++#define PHANDLE_GIC (65000)
++#define PHANDLE_ITS (64999)
++
++/ {
++	soc {
++		/* This must point to Xen interrupt-parent. */
++		interrupt-parent = <PHANDLE_GIC>;
++	};
++
++	passthrough {
++	};
++
++	reserved-memory {
++		#address-cells = <2>;
++		#size-cells = <2>;
++		ranges;
++
++		rswitch_linkfix: rswitch_linkfix_mem@44000000 {
++			compatible = "renesas,rswitch-linkfix";
++			reg = <0x0 0x44000000 0x0 0x1000>;
++		};
++	};
++	/*
++	 * When creating DT for the guest domain Xen inserts only dummy CPU nodes.
++	 * And the number of these inserted CPU nodes is equal to the number of
++	 * vCPUs assigned to this domain. All CPU properties which original DT has,
++	 * such as OPP, clock, regulator, etc are not passed to the guest’s DT.
++	 *
++	 * Example of guest vCPU node:
++	 *
++	 * cpu@0 {
++	 *     device_type = "cpu";
++	 *     compatible = "arm,armv8";
++	 *     enable-method = "psci";
++	 *     reg = <0x0>;
++	 * };
++	 *
++	 * This results in the fact that all features expecting a57_x or a53_x
++	 * CPU nodes to be present get broken. This is why we have to explicitly
++	 * remove the following.
++	 */
++};
++
++/* Xen will provide its own GIC, mask ours */
++&gic {
++	compatible = "";
++	status = "disabled";
++};
++
++/* Xen will provide vITS with phandle == PHANDLE_ITS. */
++/delete-node/&gic_its;
++
++&pciec0 {
++	msi-map = <0x0 PHANDLE_ITS 0x0 0x1000>;
++};
++
++&pciec1 {
++	msi-map = <0x0 PHANDLE_ITS 0x0 0x1000>;
++};
++
++/* Xen serial consoles */
++&scif3	{
++	status = "disabled";
++};
++
++&hscif0	{
++	status = "disabled";
++};
++
++&rswitch {
++	/delete-property/iommus;
++	memory-region = <&rswitch_linkfix>;
++};
++
++&dmac0 {
++	/delete-property/iommus;
++};
++
++&dmac1 {
++	/delete-property/iommus;
++};
++
++&rt_dmac0  {
++	/delete-property/iommus;
++};
++
++&rt_dmac1  {
++	/delete-property/iommus;
++};
++
++&rt_dmac2  {
++	/delete-property/iommus;
++};
++
++&rt_dmac3  {
++	/delete-property/iommus;
++};
++
++&ipmmu_mm {
++	status = "disabled";
++};
++
++&ipmmu_rt0 {
++	status = "disabled";
++};
++
++&ipmmu_rt1 {
++	status = "disabled";
++};
++
++
++&ipmmu_ds0{
++	status = "disabled";
++};
++
++&ipmmu_hc {
++	status = "disabled";
++};
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/r8a779f0-s4sk-proto-xen.dts b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/r8a779f0-s4sk-proto-xen.dts
+new file mode 100644
+index 0000000..180e284
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/r8a779f0-s4sk-proto-xen.dts
+@@ -0,0 +1,373 @@
++#include "r8a779f0-s4sk-prototype.dts"
++#include "xen-chosen.dtsi"
++
++/ {
++
++	model = "Renesas S4 Starter Kit prototype board based on r8a779f0, running XEN hypervisor";
++
++	/* Workaround U-Boot issue with memory nodes duplication */
++	/delete-node/ memory@48000000;
++	/delete-node/ memory@480000000;
++	memory@48000000 {
++		device_type = "memory";
++		/* first 128MB is reserved for secure area. */
++		reg = <0x0 0x48000000 0x0 0x78000000
++		       0x4 0x80000000 0x0 0x80000000>;
++	};
++
++	reserved-memory {
++		#address-cells = <2>;
++		#size-cells = <2>;
++		ranges;
++
++		/* ICCOM CR Shared memory */
++		cr_cta_mem {
++			compatible = "renesas,iccom-memory";
++			no-map;
++			reg = <0x0 0x47fc7000 0x0 0x2000>;
++		};
++
++		/* ICCOM G4MHA Shared memory */
++		g4mh_cta_mem {
++			compatible = "renesas,iccom-memory";
++			no-map;
++			reg = <0x0 0x47fc9000 0x0 0x2000>;
++		};
++
++		/* R-Switch LINKFIX table */
++		rswitch_linkfix_mem@48000000 {
++			compatible = "renesas,rswitch-linkfix";
++			no-map;
++			reg = <0x0 0x48000000 0x0 0x200000>;
++		};
++	};
++};
++
++&ipmmu_mm {
++	status = "okay";
++};
++
++&ipmmu_rt0 {
++	status = "okay";
++};
++
++&ipmmu_rt1 {
++	status = "okay";
++};
++
++/* Make sure Xen console is enabled. */
++&scif3	{
++	status = "okay";
++};
++
++&gic {
++	#address-cells = <2>;
++	#size-cells = <2>;
++	ranges;
++
++	gic_its: msi-controller@f1040000 {
++		compatible = "arm,gic-v3-its";
++		msi-controller;
++		#msi-cells = <1>;
++		reg = <0x0 0xf1040000 0 0x20000>;
++	};
++};
++
++&pciec0 {
++	reg = <0 0xe65d0000 0 0x3000>,
++	      <0 0xe65d3000 0 0x2000>,
++	      <0 0xe65d5000 0 0x1200>,
++	      <0 0xe65d6200 0 0x0e00>,
++	      <0 0xe65d7000 0 0x1000>,
++	      <0 0xfe000000 0 0x400000>;
++		 /* downstream IO */
++	ranges = <0x81000000 0 0x00000000 0 0xfe000000 0 0x00400000
++		 /* non-prefetchable memory */
++		 0x82000000 0 0x30000000 0 0x30000000 0 0x10000000>;
++	msi-map = <0x0 &gic_its 0x0 0x1000>;
++	interrupt-map = <0 0 0 1 &gic 0 0 GIC_SPI 416 IRQ_TYPE_LEVEL_HIGH
++			 0 0 0 2 &gic 0 0 GIC_SPI 416 IRQ_TYPE_LEVEL_HIGH
++			 0 0 0 3 &gic 0 0 GIC_SPI 416 IRQ_TYPE_LEVEL_HIGH
++			 0 0 0 4 &gic 0 0 GIC_SPI 416 IRQ_TYPE_LEVEL_HIGH>;
++	pinctrl-0 = <&pcie0_pins>, <&pcie1_pins>;
++};
++
++/*
++ * FIXME: Xen also parses disabled nodes: according to device tree specification
++ * such nodes may become available at run-time.
++ */
++&pciec1 {
++	reg = <0 0xe65d8000 0 0x3000>,
++	      <0 0xe65db000 0 0x2000>,
++	      <0 0xe65dd000 0 0x1200>,
++	      <0 0xe65de200 0 0x0e00>,
++	      <0 0xe65df000 0 0x1000>,
++	      <0 0xee900000 0 0x400000>;
++		 /* downstream IO */
++	ranges = <0x81000000 0 0x00000000 0 0xee900000 0 0x00400000
++		 /* non-prefetchable memory */
++		 0x82000000 0 0xc0000000 0 0xc0000000 0 0x10000000>;
++	msi-map = <0x0 &gic_its 0x0 0x1000>;
++	interrupt-map = <0 0 0 1 &gic 0 0 GIC_SPI 423 IRQ_TYPE_LEVEL_HIGH
++			 0 0 0 2 &gic 0 0 GIC_SPI 423 IRQ_TYPE_LEVEL_HIGH
++			 0 0 0 3 &gic 0 0 GIC_SPI 423 IRQ_TYPE_LEVEL_HIGH
++			 0 0 0 4 &gic 0 0 GIC_SPI 423 IRQ_TYPE_LEVEL_HIGH>;
++};
++
++/*
++ * Delete PCIEC0 Endpoint node for vPCI to be able to trap
++ * PCI configuration space access.
++ *
++ * PCIe controller 0 may operate in two modes: Root Complex or
++ * Endpoint. The are two corresponding device tree nodes for
++ * that: pciec0 and pciec0_ep. So, when you want the controller
++ * to be in a Root Complex mode then you put status = "disabled"
++ * for the Endpoint entry and vise versa. Please note that both
++ * nodes define the same "reg" and "interrupts" values.
++ *
++ * Xen, when it initializes the trap handlers for PCI
++ * configuration space access, needs the relevant regions to be
++ * NOT mapped into Domain-0's address space, but because of the
++ * current logic implemented it still assumes that the "disabled"
++ * status is valid and maps. So, it doesn't map MMIOs for
++ * the "okay" pciec0, but maps the same regions for pciec0_ep
++ * which is "disabled". for that reason, remove pciec0_ep
++ * node from the tree.
++ */
++/delete-node/ &pciec0_ep;
++
++&ipmmu_ds0{
++	status = "okay";
++};
++
++&ipmmu_hc {
++	status = "okay";
++};
++
++&mmc0 {
++	iommus = <&ipmmu_ds0 32>;
++};
++
++&rswitch {
++	iommus = <&ipmmu_hc 0>, <&ipmmu_hc 16>;
++};
++
++&dmac0 {
++	iommus = <&ipmmu_ds0 0>, <&ipmmu_ds0 1>,
++		 <&ipmmu_ds0 2>, <&ipmmu_ds0 3>,
++		 <&ipmmu_ds0 4>, <&ipmmu_ds0 5>,
++		 <&ipmmu_ds0 6>, <&ipmmu_ds0 7>,
++		 <&ipmmu_ds0 8>, <&ipmmu_ds0 9>,
++		 <&ipmmu_ds0 10>, <&ipmmu_ds0 11>,
++		 <&ipmmu_ds0 12>, <&ipmmu_ds0 13>,
++		 <&ipmmu_ds0 14>, <&ipmmu_ds0 15>;
++};
++
++&dmac1 {
++	iommus = <&ipmmu_ds0 16>, <&ipmmu_ds0 17>,
++		 <&ipmmu_ds0 18>, <&ipmmu_ds0 19>,
++		 <&ipmmu_ds0 20>, <&ipmmu_ds0 21>,
++		 <&ipmmu_ds0 22>, <&ipmmu_ds0 23>,
++		 <&ipmmu_ds0 24>, <&ipmmu_ds0 25>,
++		 <&ipmmu_ds0 26>, <&ipmmu_ds0 27>,
++		 <&ipmmu_ds0 28>, <&ipmmu_ds0 29>,
++		 <&ipmmu_ds0 30>, <&ipmmu_ds0 31>;
++};
++
++&rt_dmac0 {
++	iommus = <&ipmmu_rt1 0>, <&ipmmu_rt1 1>,
++		 <&ipmmu_rt1 2>, <&ipmmu_rt1 3>,
++		 <&ipmmu_rt1 4>, <&ipmmu_rt1 5>,
++		 <&ipmmu_rt1 6>, <&ipmmu_rt1 7>,
++		 <&ipmmu_rt1 8>, <&ipmmu_rt1 9>,
++		 <&ipmmu_rt1 10>, <&ipmmu_rt1 11>,
++		 <&ipmmu_rt1 12>, <&ipmmu_rt1 13>,
++		 <&ipmmu_rt1 14>, <&ipmmu_rt1 15>;
++};
++
++&rt_dmac1 {
++	iommus = <&ipmmu_rt1 16>, <&ipmmu_rt1 17>,
++		 <&ipmmu_rt1 18>, <&ipmmu_rt1 19>,
++		 <&ipmmu_rt1 20>, <&ipmmu_rt1 21>,
++		 <&ipmmu_rt1 22>, <&ipmmu_rt1 23>,
++		 <&ipmmu_rt1 24>, <&ipmmu_rt1 25>,
++		 <&ipmmu_rt1 26>, <&ipmmu_rt1 27>,
++		 <&ipmmu_rt1 28>, <&ipmmu_rt1 29>,
++		 <&ipmmu_rt1 30>, <&ipmmu_rt1 31>;
++};
++
++&rt_dmac2 {
++	iommus = <&ipmmu_rt1 32>, <&ipmmu_rt1 33>,
++		 <&ipmmu_rt1 34>, <&ipmmu_rt1 35>,
++		 <&ipmmu_rt1 36>, <&ipmmu_rt1 37>,
++		 <&ipmmu_rt1 38>, <&ipmmu_rt1 39>,
++		 <&ipmmu_rt1 40>, <&ipmmu_rt1 41>,
++		 <&ipmmu_rt1 42>, <&ipmmu_rt1 43>,
++		 <&ipmmu_rt1 44>, <&ipmmu_rt1 45>,
++		 <&ipmmu_rt1 46>, <&ipmmu_rt1 47>;
++};
++
++&rt_dmac3 {
++	iommus = <&ipmmu_rt1 48>, <&ipmmu_rt1 49>,
++		 <&ipmmu_rt1 50>, <&ipmmu_rt1 51>,
++		 <&ipmmu_rt1 52>, <&ipmmu_rt1 53>,
++		 <&ipmmu_rt1 54>, <&ipmmu_rt1 55>,
++		 <&ipmmu_rt1 56>, <&ipmmu_rt1 57>,
++		 <&ipmmu_rt1 58>, <&ipmmu_rt1 59>,
++		 <&ipmmu_rt1 60>, <&ipmmu_rt1 61>,
++		 <&ipmmu_rt1 62>, <&ipmmu_rt1 63>;
++};
++
++&pciec0 {
++	iommus = <&ipmmu_hc 32>;
++	iommu-map = <0x000 &ipmmu_hc 32 0x1>,
++		    <0x100 &ipmmu_hc 33 0x1>,
++		    <0x102 &ipmmu_hc 34 0x10>;
++
++};
++
++&pciec1 {
++	iommus = <&ipmmu_hc 48>;
++	iommu-map = <0x0 &ipmmu_hc 48 0x1>,
++		    <0x100 &ipmmu_hc 49 0x1>;
++	iommu-map-mask = <0xff00>;
++};
++
++&dmac0			{ xen,passthrough; };
++&dmac1			{ xen,passthrough; };
++&rt_dmac0		{ xen,passthrough; };
++&rt_dmac1		{ xen,passthrough; };
++&rt_dmac2		{ xen,passthrough; };
++&rt_dmac3		{ xen,passthrough; };
++&gpio0			{ xen,passthrough; };
++&gpio1			{ xen,passthrough; };
++&gpio2			{ xen,passthrough; };
++&gpio3			{ xen,passthrough; };
++&i2c0			{ xen,passthrough; };
++&i2c5			{ xen,passthrough; };
++&mmc0			{ xen,passthrough; };
++&pciec0			{ xen,passthrough; };
++&scif0			{ xen,passthrough; };
++&hscif1			{ xen,passthrough; };
++&rswitch		{ xen,passthrough; };
++&tsc			{ xen,passthrough; };
++&iccom			{ xen,passthrough; };
++&rtdmac_control0_00     { xen,passthrough; };
++&rtdmac_control0_01     { xen,passthrough; };
++&rtdmac_control0_02     { xen,passthrough; };
++&rtdmac_control0_03     { xen,passthrough; };
++&rtdmac_control0_04     { xen,passthrough; };
++&rtdmac_control0_05     { xen,passthrough; };
++&rtdmac_control0_06     { xen,passthrough; };
++&rtdmac_control0_07     { xen,passthrough; };
++&rtdmac_control0_08     { xen,passthrough; };
++&rtdmac_control0_09     { xen,passthrough; };
++&rtdmac_control0_10     { xen,passthrough; };
++&rtdmac_control0_11     { xen,passthrough; };
++&rtdmac_control0_12     { xen,passthrough; };
++&rtdmac_control0_13     { xen,passthrough; };
++&rtdmac_control0_14     { xen,passthrough; };
++&rtdmac_control0_15     { xen,passthrough; };
++&rtdmac_control1_00     { xen,passthrough; };
++&rtdmac_control1_01     { xen,passthrough; };
++&rtdmac_control1_02     { xen,passthrough; };
++&rtdmac_control1_03     { xen,passthrough; };
++&rtdmac_control1_04     { xen,passthrough; };
++&rtdmac_control1_05     { xen,passthrough; };
++&rtdmac_control1_06     { xen,passthrough; };
++&rtdmac_control1_07     { xen,passthrough; };
++&rtdmac_control1_08     { xen,passthrough; };
++&rtdmac_control1_09     { xen,passthrough; };
++&rtdmac_control1_10     { xen,passthrough; };
++&rtdmac_control1_11     { xen,passthrough; };
++&rtdmac_control1_12     { xen,passthrough; };
++&rtdmac_control1_13     { xen,passthrough; };
++&rtdmac_control1_14     { xen,passthrough; };
++&rtdmac_control1_15     { xen,passthrough; };
++&rtdmac_control2_00     { xen,passthrough; };
++&rtdmac_control2_01     { xen,passthrough; };
++&rtdmac_control2_02     { xen,passthrough; };
++&rtdmac_control2_03     { xen,passthrough; };
++&rtdmac_control2_04     { xen,passthrough; };
++&rtdmac_control2_05     { xen,passthrough; };
++&rtdmac_control2_06     { xen,passthrough; };
++&rtdmac_control2_07     { xen,passthrough; };
++&rtdmac_control2_08     { xen,passthrough; };
++&rtdmac_control2_09     { xen,passthrough; };
++&rtdmac_control2_10     { xen,passthrough; };
++&rtdmac_control2_11     { xen,passthrough; };
++&rtdmac_control2_12     { xen,passthrough; };
++&rtdmac_control2_13     { xen,passthrough; };
++&rtdmac_control2_14     { xen,passthrough; };
++&rtdmac_control2_15     { xen,passthrough; };
++&rtdmac_control3_00     { xen,passthrough; };
++&rtdmac_control3_01     { xen,passthrough; };
++&rtdmac_control3_02     { xen,passthrough; };
++&rtdmac_control3_03     { xen,passthrough; };
++&rtdmac_control3_04     { xen,passthrough; };
++&rtdmac_control3_05     { xen,passthrough; };
++&rtdmac_control3_06     { xen,passthrough; };
++&rtdmac_control3_07     { xen,passthrough; };
++&rtdmac_control3_08     { xen,passthrough; };
++&rtdmac_control3_09     { xen,passthrough; };
++&rtdmac_control3_10     { xen,passthrough; };
++&rtdmac_control3_11     { xen,passthrough; };
++&rtdmac_control3_12     { xen,passthrough; };
++&rtdmac_control3_13     { xen,passthrough; };
++&rtdmac_control3_14     { xen,passthrough; };
++&rtdmac_control3_15     { xen,passthrough; };
++
++&soc {
++	rswitch_osid1 {
++		xen,passthrough;
++		iommus = <&ipmmu_hc 1>, <&ipmmu_hc 17>;
++	};
++	rswitch_osid2 {
++		xen,passthrough;
++		iommus = <&ipmmu_hc 2>, <&ipmmu_hc 18>;
++	};
++	rswitch_osid3 {
++		xen,passthrough;
++		iommus = <&ipmmu_hc 3>, <&ipmmu_hc 19>;
++	};
++	rswitch_osid4 {
++		xen,passthrough;
++		iommus = <&ipmmu_hc 4>, <&ipmmu_hc 20>;
++	};
++	rswitch_osid5 {
++		xen,passthrough;
++		iommus = <&ipmmu_hc 5>, <&ipmmu_hc 21>;
++	};
++	rswitch_osid6 {
++		xen,passthrough;
++		iommus = <&ipmmu_hc 6>, <&ipmmu_hc 22>;
++	};
++	rswitch_osid7 {
++		xen,passthrough;
++		iommus = <&ipmmu_hc 7>, <&ipmmu_hc 23>;
++	};
++
++	iccom01		{ xen,passthrough; };
++	iccom02		{ xen,passthrough; };
++	iccom03		{ xen,passthrough; };
++	iccom04		{ xen,passthrough; };
++	iccom05		{ xen,passthrough; };
++	iccom06		{ xen,passthrough; };
++	iccom07		{ xen,passthrough; };
++	iccom08		{ xen,passthrough; };
++	iccom09		{ xen,passthrough; };
++	iccom010	{ xen,passthrough; };
++	iccom011	{ xen,passthrough; };
++	iccom012	{ xen,passthrough; };
++	iccom013	{ xen,passthrough; };
++	iccom014	{ xen,passthrough; };
++	iccom015	{ xen,passthrough; };
++	iccom016	{ xen,passthrough; };
++	iccom017	{ xen,passthrough; };
++	iccom018	{ xen,passthrough; };
++	iccom019	{ xen,passthrough; };
++	iccom020	{ xen,passthrough; };
++	iccom021	{ xen,passthrough; };
++	iccom022	{ xen,passthrough; };
++	iccom023	{ xen,passthrough; };
++};
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/r8a779f0-spider-xen.dts b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/r8a779f0-spider-xen.dts
+index f01de03..91b7a57 100644
+--- a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/r8a779f0-spider-xen.dts
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/r8a779f0-spider-xen.dts
+@@ -47,14 +47,6 @@
+ 	status = "okay";
+ };
+ 
+-&ipmmu_rt0 {
+-	status = "okay";
+-};
+-
+-&ipmmu_rt1 {
+-	status = "okay";
+-};
+-
+ /* Make sure Xen console is enabled. */
+ &scif3	{
+ 	status = "okay";
+@@ -222,8 +214,9 @@
+ 	iommus = <&ipmmu_hc 32>;
+ 	iommu-map = <0x000 &ipmmu_hc 32 0x1>,
+ 		    <0x100 &ipmmu_hc 33 0x1>,
+-		    <0x102 &ipmmu_hc 34 0x10>,
+-		    <0x280 &ipmmu_hc 35 0x1>;
++		    <0x101 &ipmmu_hc 34 0x1>,
++		    <0x102 &ipmmu_hc 35 0x10>,
++		    <0x280 &ipmmu_hc 36 0x1>;
+ 
+ };
+ 
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas_%.bbappend b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas_%.bbappend
+index efeaa08..7153892 100644
+--- a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas_%.bbappend
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas_%.bbappend
+@@ -1,9 +1,5 @@
+ FILESEXTRAPATHS_prepend := "${THISDIR}/${PN}:"
+ 
+-RENESAS_BSP_URL = "git://github.com/xen-troops/linux.git"
+-BRANCH = "v5.10.41/rcar-5.1.7.rc3-xt"
+-SRCREV = "d1e67027b82143bd56cc8a881e11e4d475dcffb9"
+-
+ SRC_URI_append = "\
+     file://defconfig \
+ "
+@@ -14,6 +10,7 @@ SRC_URI_append = " \
+     file://dmatest.cfg \
+     file://aos.cfg \
+     file://gpio.cfg \
++    file://l3offload.cfg \
+     file://xen-chosen.dtsi;subdir=git/arch/arm64/boot/dts/renesas \
+     file://0001-clk-shmobile-Hide-clock-for-scif3-and-hscif0.patch \
+     file://0001-PCIe-MSI-support.patch \
+diff --git a/meta-aos-rcar-gen4-domu/recipes-kernel/linux-libc-headers/linux-libc-headers_%.bbappend b/meta-aos-rcar-gen4-domu/recipes-kernel/linux-libc-headers/linux-libc-headers_%.bbappend
+deleted file mode 100644
+index 3d791f3..0000000
+--- a/meta-aos-rcar-gen4-domu/recipes-kernel/linux-libc-headers/linux-libc-headers_%.bbappend
++++ /dev/null
+@@ -1,5 +0,0 @@
+-RENESAS_BSP_URL = "git://github.com/renesas-rcar/linux-bsp.git"
+-
+-BRANCH = "v5.10.41/rcar-5.1.3.rc5"
+-SRCREV = "${AUTOREV}"
+-LINUX_VERSION = "5.10.41"
+diff --git a/meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas/r8a779f0-s4sk-proto-domu.dts b/meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas/r8a779f0-s4sk-proto-domu.dts
+new file mode 100644
+index 0000000..442360b
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas/r8a779f0-s4sk-proto-domu.dts
+@@ -0,0 +1,210 @@
++/dts-v1/;
++
++#include <dt-bindings/interrupt-controller/arm-gic.h>
++
++/*
++ * The device tree compiler (DTC) is allocating the phandle from 1 to
++ * onwards. Reserve a high value for the GIC phandle.
++ */
++#define PHANDLE_GIC (65000)
++
++/ {
++	#address-cells = <2>;
++	#size-cells = <2>;
++
++	reserved-memory {
++		#address-cells = <2>;
++		#size-cells = <2>;
++		ranges;
++
++		/* R-Switch LINKFIX table */
++		rswitch_linkfix: rswitch_linkfix_mem@44000000 {
++			compatible = "renesas,rswitch-linkfix";
++			reg = <0x0 0x44000000 0x0 0x1000>;
++		};
++	};
++
++	passthrough {
++		compatible = "simple-bus";
++		ranges;
++
++		#address-cells = <2>;
++		#size-cells = <2>;
++
++		/* This must point to Xen interrupt-parent. */
++		interrupt-parent = <PHANDLE_GIC>;
++
++		iccom00: mfis@e6260000 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 320 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "iccom_00";
++		};
++
++		iccom01 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 322 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_01";
++		};
++
++		iccom02 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 324 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_02";
++		};
++
++		iccom03 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 326 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_03";
++		};
++
++		iccom04 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 328 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_04";
++		};
++
++		iccom05 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 330 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_05";
++		};
++
++		iccom06 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 332 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_06";
++		};
++
++		iccom07 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 334 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_07";
++		};
++
++		iccom08 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 336 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_08";
++		};
++
++		iccom09 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 338 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_09";
++		};
++
++		iccom010 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 340 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_10";
++		};
++
++
++		iccom011 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 342 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_11";
++		};
++
++		iccom012 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 344 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_12";
++		};
++
++		iccom013 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 346 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_13";
++		};
++
++		iccom014 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 348 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_14";
++		};
++
++		iccom015 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 350 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_15";
++		};
++		iccom016 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 354 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_16";
++		};
++
++		iccom017 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 356 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_17";
++		};
++
++		iccom018 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 358 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_18";
++		};
++
++		iccom019 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 360 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_19";
++		};
++
++		iccom020 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 362 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_20";
++		};
++
++		iccom021 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 364 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_21";
++		};
++
++		iccom022 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 366 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_22";
++		};
++
++		iccom023 {
++			compatible = "generic-uio";
++			reg = <0 0xe6260000 0 0x10000>;
++			interrupts = <GIC_SPI 368 IRQ_TYPE_LEVEL_HIGH>;
++			linux,uio-name = "irq_iccom_00_23";
++		};
++
++		rswitch {
++			compatible = "renesas,etherswitch-xen";
++			memory-region = <&rswitch_linkfix>;
++		};
++	};
++};
+diff --git a/meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas_%.bbappend b/meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas_%.bbappend
+index 0d30114..5a10347 100644
+--- a/meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas_%.bbappend
++++ b/meta-aos-rcar-gen4-domu/recipes-kernel/linux/linux-renesas_%.bbappend
+@@ -1,14 +1,10 @@
+ FILESEXTRAPATHS_prepend := "${THISDIR}/${PN}:"
+ 
+-RENESAS_BSP_URL = "git://github.com/xen-troops/linux.git"
+-BRANCH = "v5.10.41/rcar-5.1.7.rc3-xt"
+-SRCREV = "d1e67027b82143bd56cc8a881e11e4d475dcffb9"
+-
+ SRC_URI_append = "\
+-    file://r8a779f0-spider-domu.dts;subdir=git/arch/${ARCH}/boot/dts/renesas \
++    file://r8a779f0-s4sk-proto-domu.dts;subdir=git/arch/${ARCH}/boot/dts/renesas \
+     file://defconfig \
+     file://rswitch.cfg \
+     file://dmatest.cfg \
+ "
+ 
+-KERNEL_DEVICETREE_append = " renesas/r8a779f0-spider-domu.dtb"
++KERNEL_DEVICETREE_append = " renesas/r8a779f0-s4sk-proto-domu.dtb"
+diff --git a/meta-aos-rcar-gen4-domx/recipes-security/optee/optee-client_%.bbappend b/meta-aos-rcar-gen4-domx/recipes-security/optee/optee-client_%.bbappend
+index 5230e03..a65c344 100644
+--- a/meta-aos-rcar-gen4-domx/recipes-security/optee/optee-client_%.bbappend
++++ b/meta-aos-rcar-gen4-domx/recipes-security/optee/optee-client_%.bbappend
+@@ -1,4 +1,4 @@
+-COMPATIBLE_MACHINE = "spider"
++COMPATIBLE_MACHINE = "(spider|s4sk-proto)"
+ 
+ PV = "3.17.0+git${SRCPV}"
+ 
+diff --git a/meta-aos-rcar-gen4-domx/recipes-security/optee/optee-os_%.bbappend b/meta-aos-rcar-gen4-domx/recipes-security/optee/optee-os_%.bbappend
+index a074339..41e2d90 100644
+--- a/meta-aos-rcar-gen4-domx/recipes-security/optee/optee-os_%.bbappend
++++ b/meta-aos-rcar-gen4-domx/recipes-security/optee/optee-os_%.bbappend
+@@ -1,6 +1,6 @@
+ FILESEXTRAPATHS_prepend := "${THISDIR}/optee-os:"
+ 
+-COMPATIBLE_MACHINE = "spider"
++COMPATIBLE_MACHINE = "(spider|s4sk-proto)"
+ 
+ PV = "3.17.0+git${SRCPV}"
+ 
+diff --git a/meta-aos-rcar-gen4-domx/recipes-security/optee/optee-test_%.bbappend b/meta-aos-rcar-gen4-domx/recipes-security/optee/optee-test_%.bbappend
+index a5c1d90..0642e94 100644
+--- a/meta-aos-rcar-gen4-domx/recipes-security/optee/optee-test_%.bbappend
++++ b/meta-aos-rcar-gen4-domx/recipes-security/optee/optee-test_%.bbappend
+@@ -1,4 +1,4 @@
+-COMPATIBLE_MACHINE = "spider"
++COMPATIBLE_MACHINE = "(spider|s4sk-proto)"
+ 
+ PV = "3.17.0+git${SRCPV}"
+ 
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-connectivity/xen-network/files/systemd-networkd-wait-online.conf b/meta-aos-rcar-gen4-driver-domain/recipes-connectivity/xen-network/files/systemd-networkd-wait-online.conf
+deleted file mode 100644
+index 10268b0..0000000
+--- a/meta-aos-rcar-gen4-driver-domain/recipes-connectivity/xen-network/files/systemd-networkd-wait-online.conf
++++ /dev/null
+@@ -1,3 +0,0 @@
+-[Service]
+-ExecStart=
+-ExecStart=/lib/systemd/systemd-networkd-wait-online --interface=tsn0
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/early_printk_spider.cfg b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/early_printk_s4sk-proto.cfg
+similarity index 100%
+rename from meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/early_printk_spider.cfg
+rename to meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/early_printk_s4sk-proto.cfg
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/xen_git.bbappend b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/xen_git.bbappend
+index fab6e22..be23f75 100644
+--- a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/xen_git.bbappend
++++ b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/xen_git.bbappend
+@@ -1,7 +1,7 @@
+ FILESEXTRAPATHS_prepend := "${THISDIR}/files:"
+ 
+-SRC_URI_append_spider = " \
+-    file://early_printk_spider.cfg \
++SRC_URI_append_s4sk-proto = " \
++    file://early_printk_s4sk-proto.cfg \
+ "
+ 
+ do_configure_append() {
+-- 
+2.25.1
+

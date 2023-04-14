@@ -1,0 +1,25 @@
+From 3143c6ed70153372e1d232cf79e8bbe5df4ede52 Mon Sep 17 00:00:00 2001
+From: Duy Dang <duy.dang.yw@renesas.com>
+Date: Fri, 14 Apr 2023 15:21:29 +0900
+Subject: [PATCH 3/9] domu.service: remove wait for bridge service
+
+Signed-off-by: Duy Dang <duy.dang.yw@renesas.com>
+---
+ .../recipes-guests/domu/files/domu.service                      | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu.service b/meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu.service
+index 7f7edc8..ff9f36b 100644
+--- a/meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu.service
++++ b/meta-aos-rcar-gen4-control-domain/recipes-guests/domu/files/domu.service
+@@ -1,6 +1,6 @@
+ [Unit]
+ Description=DomU
+-Requires=backend-ready@bridge.service backend-ready@pcid.service
++Requires=backend-ready@pcid.service
+ After=backend-ready@bridge.service backend-ready@pcid.service
+ 
+ [Service]
+-- 
+2.25.1
+

@@ -1,0 +1,3466 @@
+From 241ba60e7c9ca1cbf9b40870779fb6f91075b946 Mon Sep 17 00:00:00 2001
+From: Duy Dang <duy.dang.yw@renesas.com>
+Date: Fri, 14 Apr 2023 15:41:37 +0900
+Subject: [PATCH 5/9] domd: kernel: A series of patches to support the VMQ
+ feature
+
+Signed-off-by: Duy Dang <duy.dang.yw@renesas.com>
+---
+ ...h-move-some-definitions-to-rswitch.h.patch | 527 ++++++++++++++
+ ...nable-support-for-direct-descriptors.patch |  64 ++
+ ...003-HACK-rswitch-export-private-date.patch |  67 ++
+ ...-allocate-chains-for-virtual-devices.patch |  43 ++
+ ...unctions-related-to-resource-allocat.patch | 102 +++
+ ...ity-to-allocate-chains-with-given-id.patch | 140 ++++
+ ...h-factor-our-chain_register-function.patch | 136 ++++
+ ...008-rswitch-add-definitions-for-OSID.patch |  41 ++
+ ...e-with-interrupts-for-un-used-chains.patch |  26 +
+ ...ocated-descriptors-from-reserved-mem.patch |  74 ++
+ ...1-rswitch-add-Xen-PV-back-end-driver.patch | 603 ++++++++++++++++
+ ...-rswitch-add-XEN-PV-front-end-driver.patch | 675 ++++++++++++++++++
+ ...itch-xenback-fix-event-channel-usage.patch |  35 +
+ ...e-parent-device-for-devm-allocations.patch |  44 ++
+ ...rswitch-rework-port-based-forwarding.patch | 120 ++++
+ ...-rswitch_xenback-enable-correct-IRQs.patch |  59 ++
+ ...-vmq-add-support-for-TSNx-interfaces.patch | 301 ++++++++
+ ...ch-vmq-front-streamline-MAC-handling.patch |  43 ++
+ ...rswitch-vmq-complete-switch-do-GWCA1.patch |  80 +++
+ ...back-re-arrange-chains-configuration.patch |  78 ++
+ .../linux/linux-renesas_%.bbappend            |  23 +
+ 21 files changed, 3281 insertions(+)
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-rswitch-move-some-definitions-to-rswitch.h.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0002-rswitch-enable-support-for-direct-descriptors.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0003-HACK-rswitch-export-private-date.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0004-rswitch-allocate-chains-for-virtual-devices.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0005-rswitch-export-functions-related-to-resource-allocat.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0006-rswitch-add-ability-to-allocate-chains-with-given-id.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0007-rswitch-factor-our-chain_register-function.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0008-rswitch-add-definitions-for-OSID.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0009-rswitch-fix-issue-with-interrupts-for-un-used-chains.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0010-HACK-rswitch-allocated-descriptors-from-reserved-mem.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0011-rswitch-add-Xen-PV-back-end-driver.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0012-rswitch-add-XEN-PV-front-end-driver.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0013-rswitch-xenback-fix-event-channel-usage.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0014-rswitch-use-parent-device-for-devm-allocations.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0015-rswitch-rework-port-based-forwarding.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0016-rswitch_xenback-enable-correct-IRQs.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0017-rswitch-vmq-add-support-for-TSNx-interfaces.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0018-rswitch-vmq-front-streamline-MAC-handling.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0019-rswitch-vmq-complete-switch-do-GWCA1.patch
+ create mode 100755 meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0020-rswtich-vmq-back-re-arrange-chains-configuration.patch
+
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-rswitch-move-some-definitions-to-rswitch.h.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-rswitch-move-some-definitions-to-rswitch.h.patch
+new file mode 100755
+index 0000000..ec885dc
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0001-rswitch-move-some-definitions-to-rswitch.h.patch
+@@ -0,0 +1,527 @@
++From 5114a33c4a4236b22216d0068fd18d23928de095 Mon Sep 17 00:00:00 2001
++From: Dung Nguyen <dung.nguyen.zy@renesas.com>
++Date: Thu, 22 Dec 2022 16:13:23 +0700
++Subject: [PATCH 01/20] rswitch: move some definitions to rswitch.h
++
++We are planning to add other modules to rswitch. Thus we need to move
++some definitions into header file to be able to use them from other
++modules.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Signed-off-by: Dung Nguyen <dung.nguyen.zy@renesas.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c | 210 +-----------------------
++ drivers/net/ethernet/renesas/rswitch.h | 217 +++++++++++++++++++++++++
++ 2 files changed, 225 insertions(+), 202 deletions(-)
++ create mode 100644 drivers/net/ethernet/renesas/rswitch.h
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index 5c11bb36eb9f..e2b186e6ca62 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -24,33 +24,13 @@
++ #include <linux/reset.h>
++ 
++ #include "rtsn_ptp.h"
+++#include "rswitch.h"
++ 
++ static void *debug_addr;
++-static inline u32 rs_read32(void *addr)
++-{
++-	return ioread32(addr);
++-}
++-
++-static inline void rs_write32(u32 data, void *addr)
++-{
++-	iowrite32(data, addr);
++-}
++-
++-#define RSWITCH_NUM_HW		5
++-#define RSWITCH_MAX_NUM_ETHA	3
++-#define RSWITCH_MAX_NUM_NDEV	8
++-#define RSWITCH_MAX_NUM_CHAINS	128
++ 
++ #define RSWITCH_GWCA_IDX_TO_HW_NUM(i)	((i) + RSWITCH_MAX_NUM_ETHA)
++ #define RSWITCH_HW_NUM_TO_GWCA_IDX(i)	((i) - RSWITCH_MAX_NUM_ETHA)
++ 
++-#define TX_RING_SIZE		1024
++-#define RX_RING_SIZE		1024
++-
++-#define PKT_BUF_SZ		1584
++-#define RSWITCH_ALIGN		128
++-#define RSWITCH_MAX_CTAG_PCP	7
++-
++ #define RSWITCH_COMA_OFFSET	0x00009000
++ #define RSWITCH_ETHA_OFFSET	0x0000a000	/* with RMAC */
++ #define RSWITCH_ETHA_SIZE	0x00002000	/* with RMAC */
++@@ -756,12 +736,6 @@ enum rswitch_etha_mode {
++ #define MLVC_PLV	BIT(16)
++ 
++ /* GWCA */
++-enum rswitch_gwca_mode {
++-	GWMC_OPC_RESET,
++-	GWMC_OPC_DISABLE,
++-	GWMC_OPC_CONFIG,
++-	GWMC_OPC_OPERATION,
++-};
++ #define GWMS_OPS_MASK	GWMC_OPC_OPERATION
++ 
++ #define GWMTIRM_MTIOG	BIT(0)
++@@ -872,172 +846,7 @@ enum rswitch_serdes_mode {
++ #define BANK_1F80                               0x1f80
++ #define VR_MII_AN_CTRL                          0x0004
++ 
++-/* Descriptors */
++-enum RX_DS_CC_BIT {
++-	RX_DS	= 0x0fff, /* Data size */
++-	RX_TR	= 0x1000, /* Truncation indication */
++-	RX_EI	= 0x2000, /* Error indication */
++-	RX_PS	= 0xc000, /* Padding selection */
++-};
++-
++-enum TX_DS_TAGL_BIT {
++-	TX_DS	= 0x0fff, /* Data size */
++-	TX_TAGL	= 0xf000, /* Frame tag LSBs */
++-};
++-
++-enum DIE_DT {
++-	/* Frame data */
++-	DT_FSINGLE	= 0x80,
++-	DT_FSTART	= 0x90,
++-	DT_FMID		= 0xA0,
++-	DT_FEND		= 0xB8,
++-
++-	/* Chain control */
++-	DT_LEMPTY	= 0xC0,
++-	DT_EEMPTY	= 0xD0,
++-	DT_LINKFIX	= 0x00,
++-	DT_LINK		= 0xE0,
++-	DT_EOS		= 0xF0,
++-	/* HW/SW arbitration */
++-	DT_FEMPTY	= 0x40,
++-	DT_FEMPTY_IS	= 0x10,
++-	DT_FEMPTY_IC	= 0x20,
++-	DT_FEMPTY_ND	= 0x38,
++-	DT_FEMPTY_START	= 0x50,
++-	DT_FEMPTY_MID	= 0x60,
++-	DT_FEMPTY_END	= 0x70,
++-
++-	DT_MASK		= 0xF0,
++-	DIE		= 0x08,	/* Descriptor Interrupt Enable */
++-};
++-
++-struct rswitch_desc {
++-	__le16 info_ds;	/* Descriptor size */
++-	u8 die_dt;	/* Descriptor interrupt enable and type */
++-	__u8  dptrh;	/* Descriptor pointer MSB */
++-	__le32 dptrl;	/* Descriptor pointer LSW */
++-} __packed;
++-
++-struct rswitch_ts_desc {
++-	__le16 info_ds;	/* Descriptor size */
++-	u8 die_dt;	/* Descriptor interrupt enable and type */
++-	__u8  dptrh;	/* Descriptor pointer MSB */
++-	__le32 dptrl;	/* Descriptor pointer LSW */
++-	__le32 ts_nsec;
++-	__le32 ts_sec;
++-} __packed;
++-
++-struct rswitch_ext_desc {
++-	__le16 info_ds;	/* Descriptor size */
++-	u8 die_dt;	/* Descriptor interrupt enable and type */
++-	__u8  dptrh;	/* Descriptor pointer MSB */
++-	__le32 dptrl;	/* Descriptor pointer LSW */
++-	__le64 info1;
++-} __packed;
++-
++-struct rswitch_ext_ts_desc {
++-	__le16 info_ds;	/* Descriptor size */
++-	u8 die_dt;	/* Descriptor interrupt enable and type */
++-	__u8  dptrh;	/* Descriptor pointer MSB */
++-	__le32 dptrl;	/* Descriptor pointer LSW */
++-	__le64 info1;
++-	__le32 ts_nsec;
++-	__le32 ts_sec;
++-} __packed;
++-
++-#define DESC_INFO1_FMT		BIT(2)
++-#define DESC_INFO1_CSD0_SHIFT	32
++-#define DESC_INFO1_CSD1_SHIFT	40
++-#define DESC_INFO1_DV_SHIFT	48
++-
++-struct rswitch_etha {
++-	int index;
++-	void __iomem *addr;
++-	void __iomem *serdes_addr;
++-	bool external_phy;
++-	struct mii_bus *mii;
++-	phy_interface_t phy_interface;
++-	u8 mac_addr[MAX_ADDR_LEN];
++-	int link;
++-	int speed;
++-	bool operated;
++-};
++-
++-struct rswitch_gwca_chain {
++-	int index;
++-	bool dir_tx;
++-	bool gptp;
++-	union {
++-		struct rswitch_ext_desc *ring;
++-		struct rswitch_ext_ts_desc *ts_ring;
++-	};
++-	dma_addr_t ring_dma;
++-	u32 num_ring;
++-	u32 cur;
++-	u32 dirty;
++-	struct sk_buff **skb;
++-
++-	struct net_device *ndev;	/* chain to ndev for irq */
++-};
++-
++-#define RSWITCH_NUM_IRQ_REGS	(RSWITCH_MAX_NUM_CHAINS / BITS_PER_TYPE(u32))
++-struct rswitch_gwca {
++-	int index;
++-	struct rswitch_gwca_chain *chains;
++-	int num_chains;
++-	DECLARE_BITMAP(used, RSWITCH_MAX_NUM_CHAINS);
++-	u32 tx_irq_bits[RSWITCH_NUM_IRQ_REGS];
++-	u32 rx_irq_bits[RSWITCH_NUM_IRQ_REGS];
++-	int speed;
++-};
++-
++ #define NUM_CHAINS_PER_NDEV	2
++-struct rswitch_device {
++-	struct rswitch_private *priv;
++-	struct net_device *ndev;
++-	struct napi_struct napi;
++-	void __iomem *addr;
++-	bool gptp_master;
++-	struct rswitch_gwca_chain *tx_chain;
++-	struct rswitch_gwca_chain *rx_chain;
++-	spinlock_t lock;
++-	u8 ts_tag;
++-
++-	int port;
++-	struct rswitch_etha *etha;
++-};
++-
++-struct rswitch_mfwd_mac_table_entry {
++-	int chain_index;
++-	unsigned char addr[MAX_ADDR_LEN];
++-};
++-
++-struct rswitch_mfwd {
++-	struct rswitch_mac_table_entry *mac_table_entries;
++-	int num_mac_table_entries;
++-};
++-
++-struct rswitch_private {
++-	struct platform_device *pdev;
++-	void __iomem *addr;
++-	void __iomem *serdes_addr;
++-	struct rtsn_ptp_private *ptp_priv;
++-	struct rswitch_desc *desc_bat;
++-	dma_addr_t desc_bat_dma;
++-	u32 desc_bat_size;
++-
++-	struct rswitch_device *rdev[RSWITCH_MAX_NUM_NDEV];
++-
++-	struct rswitch_gwca gwca;
++-	struct rswitch_etha etha[RSWITCH_MAX_NUM_ETHA];
++-	struct rswitch_mfwd mfwd;
++-
++-	struct clk *rsw_clk;
++-	struct clk *phy_clk;
++-
++-	struct reset_control *sd_rst;
++-	bool serdes_init;
++-};
++ 
++ static int num_ndev = 3;
++ module_param(num_ndev, int, 0644);
++@@ -1297,7 +1106,7 @@ static int rswitch_tx_free(struct net_device *ndev, bool free_txed_only)
++ 	return free_num;
++ }
++ 
++-static int rswitch_poll(struct napi_struct *napi, int budget)
+++int rswitch_poll(struct napi_struct *napi, int budget)
++ {
++ 	struct net_device *ndev = napi->dev;
++ 	struct rswitch_device *rdev = netdev_priv(ndev);
++@@ -2346,7 +2155,7 @@ static int rswitch_do_ioctl(struct net_device *ndev, struct ifreq *req, int cmd)
++ 		return phy_mii_ioctl(phydev, req, cmd);
++ }
++ 
++-static const struct net_device_ops rswitch_netdev_ops = {
+++const struct net_device_ops rswitch_netdev_ops = {
++ 	.ndo_open = rswitch_open,
++ 	.ndo_stop = rswitch_stop,
++ 	.ndo_start_xmit = rswitch_start_xmit,
++@@ -2716,8 +2525,7 @@ static void rswitch_gwca_put(struct rswitch_private *priv,
++ 	clear_bit(c->index, priv->gwca.used);
++ }
++ 
++-static int rswitch_txdmac_init(struct net_device *ndev,
++-			       struct rswitch_private *priv)
+++int rswitch_txdmac_init(struct net_device *ndev, struct rswitch_private *priv)
++ {
++ 	struct rswitch_device *rdev = netdev_priv(ndev);
++ 	int err;
++@@ -2746,8 +2554,8 @@ static int rswitch_txdmac_init(struct net_device *ndev,
++ 	return err;
++ }
++ 
++-static void rswitch_txdmac_free(struct net_device *ndev,
++-				struct rswitch_private *priv)
+++void rswitch_txdmac_free(struct net_device *ndev,
+++			 struct rswitch_private *priv)
++ {
++ 	struct rswitch_device *rdev = netdev_priv(ndev);
++ 
++@@ -2755,8 +2563,7 @@ static void rswitch_txdmac_free(struct net_device *ndev,
++ 	rswitch_gwca_put(priv, rdev->tx_chain);
++ }
++ 
++-static int rswitch_rxdmac_init(struct net_device *ndev,
++-			       struct rswitch_private *priv)
+++int rswitch_rxdmac_init(struct net_device *ndev, struct rswitch_private *priv)
++ {
++ 	struct rswitch_device *rdev = netdev_priv(ndev);
++ 	int err;
++@@ -2785,8 +2592,7 @@ static int rswitch_rxdmac_init(struct net_device *ndev,
++ 	return err;
++ }
++ 
++-static void rswitch_rxdmac_free(struct net_device *ndev,
++-				struct rswitch_private *priv)
+++void rswitch_rxdmac_free(struct net_device *ndev, struct rswitch_private *priv)
++ {
++ 	struct rswitch_device *rdev = netdev_priv(ndev);
++ 
++diff --git a/drivers/net/ethernet/renesas/rswitch.h b/drivers/net/ethernet/renesas/rswitch.h
++new file mode 100644
++index 000000000000..9172f30b79ec
++--- /dev/null
+++++ b/drivers/net/ethernet/renesas/rswitch.h
++@@ -0,0 +1,217 @@
+++/* SPDX-License-Identifier: GPL-2.0 */
+++/* Renesas Ethernet Switch Driver common functions
+++ *
+++ * Copyright (C) 2022 Renesas Electronics Corporation
+++ * Copyright (C) 2022 EPAM Systems
+++ */
+++
+++#include <linux/kernel.h>
+++#include <linux/phy.h>
+++#include <linux/netdevice.h>
+++#include <linux/io.h>
+++
+++static inline u32 rs_read32(void *addr)
+++{
+++	return ioread32(addr);
+++}
+++
+++static inline void rs_write32(u32 data, void *addr)
+++{
+++	iowrite32(data, addr);
+++}
+++
+++enum rswitch_gwca_mode {
+++	GWMC_OPC_RESET,
+++	GWMC_OPC_DISABLE,
+++	GWMC_OPC_CONFIG,
+++	GWMC_OPC_OPERATION,
+++};
+++
+++/* Descriptors */
+++enum RX_DS_CC_BIT {
+++	RX_DS	= 0x0fff, /* Data size */
+++	RX_TR	= 0x1000, /* Truncation indication */
+++	RX_EI	= 0x2000, /* Error indication */
+++	RX_PS	= 0xc000, /* Padding selection */
+++};
+++
+++enum TX_DS_TAGL_BIT {
+++	TX_DS	= 0x0fff, /* Data size */
+++	TX_TAGL	= 0xf000, /* Frame tag LSBs */
+++};
+++
+++enum DIE_DT {
+++	/* Frame data */
+++	DT_FSINGLE	= 0x80,
+++	DT_FSTART	= 0x90,
+++	DT_FMID		= 0xA0,
+++	DT_FEND		= 0xB8,
+++
+++	/* Chain control */
+++	DT_LEMPTY	= 0xC0,
+++	DT_EEMPTY	= 0xD0,
+++	DT_LINKFIX	= 0x00,
+++	DT_LINK		= 0xE0,
+++	DT_EOS		= 0xF0,
+++	/* HW/SW arbitration */
+++	DT_FEMPTY	= 0x40,
+++	DT_FEMPTY_IS	= 0x10,
+++	DT_FEMPTY_IC	= 0x20,
+++	DT_FEMPTY_ND	= 0x38,
+++	DT_FEMPTY_START	= 0x50,
+++	DT_FEMPTY_MID	= 0x60,
+++	DT_FEMPTY_END	= 0x70,
+++
+++	DT_MASK		= 0xF0,
+++	DIE		= 0x08,	/* Descriptor Interrupt Enable */
+++};
+++
+++struct rswitch_desc {
+++	__le16 info_ds;	/* Descriptor size */
+++	u8 die_dt;	/* Descriptor interrupt enable and type */
+++	__u8  dptrh;	/* Descriptor pointer MSB */
+++	__le32 dptrl;	/* Descriptor pointer LSW */
+++} __packed;
+++
+++struct rswitch_ts_desc {
+++	__le16 info_ds;	/* Descriptor size */
+++	u8 die_dt;	/* Descriptor interrupt enable and type */
+++	__u8  dptrh;	/* Descriptor pointer MSB */
+++	__le32 dptrl;	/* Descriptor pointer LSW */
+++	__le32 ts_nsec;
+++	__le32 ts_sec;
+++} __packed;
+++
+++struct rswitch_ext_desc {
+++	__le16 info_ds;	/* Descriptor size */
+++	u8 die_dt;	/* Descriptor interrupt enable and type */
+++	__u8  dptrh;	/* Descriptor pointer MSB */
+++	__le32 dptrl;	/* Descriptor pointer LSW */
+++	__le64 info1;
+++} __packed;
+++
+++struct rswitch_ext_ts_desc {
+++	__le16 info_ds;	/* Descriptor size */
+++	u8 die_dt;	/* Descriptor interrupt enable and type */
+++	__u8  dptrh;	/* Descriptor pointer MSB */
+++	__le32 dptrl;	/* Descriptor pointer LSW */
+++	__le64 info1;
+++	__le32 ts_nsec;
+++	__le32 ts_sec;
+++} __packed;
+++
+++#define DESC_INFO1_FMT		BIT(2)
+++#define DESC_INFO1_CSD0_SHIFT	32
+++#define DESC_INFO1_CSD1_SHIFT	40
+++#define DESC_INFO1_DV_SHIFT	48
+++
+++struct rswitch_gwca_chain {
+++	int index;
+++	bool dir_tx;
+++	bool gptp;
+++	union {
+++		struct rswitch_ext_desc *ring;
+++		struct rswitch_ext_ts_desc *ts_ring;
+++	};
+++	dma_addr_t ring_dma;
+++	u32 num_ring;
+++	u32 cur;
+++	u32 dirty;
+++	struct sk_buff **skb;
+++
+++	struct net_device *ndev;	/* chain to ndev for irq */
+++	struct rswitch_vmq_back_info *back_info;
+++};
+++
+++#define RSWITCH_MAX_NUM_CHAINS	128
+++#define RSWITCH_NUM_IRQ_REGS	(RSWITCH_MAX_NUM_CHAINS / BITS_PER_TYPE(u32))
+++#define RSWITCH_NUM_HW		5
+++#define RSWITCH_MAX_NUM_ETHA	3
+++#define RSWITCH_MAX_NUM_NDEV	8
+++
+++#define TX_RING_SIZE		1024
+++#define RX_RING_SIZE		1024
+++
+++#define PKT_BUF_SZ		1584
+++#define RSWITCH_ALIGN		128
+++#define RSWITCH_MAX_CTAG_PCP	7
+++
+++struct rswitch_gwca {
+++	int index;
+++	struct rswitch_gwca_chain *chains;
+++	int num_chains;
+++	DECLARE_BITMAP(used, RSWITCH_MAX_NUM_CHAINS);
+++	u32 tx_irq_bits[RSWITCH_NUM_IRQ_REGS];
+++	u32 rx_irq_bits[RSWITCH_NUM_IRQ_REGS];
+++	int speed;
+++};
+++
+++struct rswitch_etha {
+++	int index;
+++	void __iomem *addr;
+++	void __iomem *serdes_addr;
+++	bool external_phy;
+++	struct mii_bus *mii;
+++	phy_interface_t phy_interface;
+++	u8 mac_addr[MAX_ADDR_LEN];
+++	int link;
+++	int speed;
+++	bool operated;
+++};
+++
+++struct rswitch_mfwd_mac_table_entry {
+++	int chain_index;
+++	unsigned char addr[MAX_ADDR_LEN];
+++};
+++
+++struct rswitch_mfwd {
+++	struct rswitch_mac_table_entry *mac_table_entries;
+++	int num_mac_table_entries;
+++};
+++
+++struct rswitch_device {
+++	struct rswitch_private *priv;
+++	struct net_device *ndev;
+++	struct napi_struct napi;
+++	void __iomem *addr;
+++	bool gptp_master;
+++	struct rswitch_gwca_chain *tx_chain;
+++	struct rswitch_gwca_chain *rx_chain;
+++	spinlock_t lock;
+++	u8 ts_tag;
+++
+++	int port;
+++	struct rswitch_etha *etha;
+++};
+++
+++struct rswitch_private {
+++	struct platform_device *pdev;
+++	void __iomem *addr;
+++	void __iomem *serdes_addr;
+++	struct rtsn_ptp_private *ptp_priv;
+++	struct rswitch_desc *desc_bat;
+++	dma_addr_t desc_bat_dma;
+++	u32 desc_bat_size;
+++
+++	struct rswitch_device *rdev[RSWITCH_MAX_NUM_NDEV];
+++
+++	struct rswitch_gwca gwca;
+++	struct rswitch_etha etha[RSWITCH_MAX_NUM_ETHA];
+++	struct rswitch_mfwd mfwd;
+++
+++	struct clk *rsw_clk;
+++	struct clk *phy_clk;
+++
+++	struct reset_control *sd_rst;
+++	bool serdes_init;
+++};
+++
+++extern const struct net_device_ops rswitch_netdev_ops;
+++
+++int rswitch_txdmac_init(struct net_device *ndev, struct rswitch_private *priv);
+++void rswitch_txdmac_free(struct net_device *ndev, struct rswitch_private *priv);
+++
+++int rswitch_rxdmac_init(struct net_device *ndev, struct rswitch_private *priv);
+++void rswitch_rxdmac_free(struct net_device *ndev, struct rswitch_private *priv);
+++
+++int rswitch_poll(struct napi_struct *napi, int budget);
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0002-rswitch-enable-support-for-direct-descriptors.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0002-rswitch-enable-support-for-direct-descriptors.patch
+new file mode 100755
+index 0000000..95d72cc
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0002-rswitch-enable-support-for-direct-descriptors.patch
+@@ -0,0 +1,64 @@
++From 5b99fa686dc8194501350286f3345388e3fe8e80 Mon Sep 17 00:00:00 2001
++From: Dung Nguyen <dung.nguyen.zy@renesas.com>
++Date: Mon, 19 Dec 2022 17:38:04 +0700
++Subject: [PATCH 02/20] rswitch: enable support for direct descriptors
++
++Add remote_chain field to struct rswitch_device. This property should
++can chain index of the remote RX chain. If the index is set, all
++packets will be sent directly to this chain.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Signed-off-by: Dung Nguyen <dung.nguyen.zy@renesas.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c | 8 ++++++++
++ drivers/net/ethernet/renesas/rswitch.h | 1 +
++ 2 files changed, 9 insertions(+)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index e2b186e6ca62..dc07adb4e1b3 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -2039,6 +2039,11 @@ static int rswitch_start_xmit(struct sk_buff *skb, struct net_device *ndev)
++ 		desc->info1 = (rdev->ts_tag << 8) | BIT(3);
++ 	}
++ 
+++	/* Use direct descriptor if we know remote chain number */
+++	/* HACK: GWCA0 Port number (8) is hardcoded */
+++	if (rdev->remote_chain >= 0)
+++		desc->info1 |= ((u64)rdev->remote_chain << 32) | (8UL << 48) |  BIT(2);
+++
++ 	skb_tx_timestamp(skb);
++ 	dma_wmb();
++ 
++@@ -2654,6 +2659,7 @@ static int rswitch_ndev_create(struct rswitch_private *priv, int index)
++ 		rdev->port = -1;
++ 		rdev->etha = NULL;
++ 	}
+++	rdev->remote_chain = -1;
++ 	rdev->addr = priv->addr;
++ 
++ 	spin_lock_init(&rdev->lock);
++@@ -2816,6 +2822,8 @@ static void rswitch_fwd_init(struct rswitch_private *priv)
++ 	}
++ 	rs_write32(GENMASK(num_etha_ports - 1, 0), priv->addr + FWPBFC(priv->gwca.index));
++ 
+++	/* Enable Direct Descriptors for GWCA1 */
+++	rs_write32(FWPC1_DDE, priv->addr + FWPC10 + (priv->gwca.index * 0x10));
++ 	/* TODO: add chrdev for fwd */
++ 	/* TODO: add proc for fwd */
++ }
++diff --git a/drivers/net/ethernet/renesas/rswitch.h b/drivers/net/ethernet/renesas/rswitch.h
++index 9172f30b79ec..a109e4acadf6 100644
++--- a/drivers/net/ethernet/renesas/rswitch.h
+++++ b/drivers/net/ethernet/renesas/rswitch.h
++@@ -182,6 +182,7 @@ struct rswitch_device {
++ 
++ 	int port;
++ 	struct rswitch_etha *etha;
+++	int remote_chain;
++ };
++ 
++ struct rswitch_private {
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0003-HACK-rswitch-export-private-date.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0003-HACK-rswitch-export-private-date.patch
+new file mode 100755
+index 0000000..ed14813
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0003-HACK-rswitch-export-private-date.patch
+@@ -0,0 +1,67 @@
++From 0e569dfe098a1f1de51e358d9dcca6ec2a77755e Mon Sep 17 00:00:00 2001
++From: Dung Nguyen <dung.nguyen.zy@renesas.com>
++Date: Tue, 20 Dec 2022 13:39:16 +0700
++Subject: [PATCH 03/20] [HACK] rswitch: export private date
++
++We need this to allow Xen back-end access rswitch private data.
++
++Proper solution would be to find private data based on some input
++from Dom0/xl.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Signed-off-by: Dung Nguyen <dung.nguyen.zy@renesas.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c | 13 +++++++++++++
++ drivers/net/ethernet/renesas/rswitch.h |  1 +
++ 2 files changed, 14 insertions(+)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index dc07adb4e1b3..721ea352c4d5 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -865,6 +865,15 @@ module_param(sk_board, bool, 0644);
++ MODULE_PARM_DESC(sk_board, "Discriminate S4 Starter Kit and Spider board");
++ 
++ #define RSWITCH_TIMEOUT_MS	1000
+++
+++/* HACK: store rswitch_priv globally so Xen backend can access it */
+++/* TODO: Implement correct way of accessing private data */
+++static struct rswitch_private *glob_priv;
+++struct rswitch_private *rswitch_find_priv(void)
+++{
+++	return glob_priv;
+++};
+++
++ static int rswitch_reg_wait(void __iomem *addr, u32 offs, u32 mask, u32 expected)
++ {
++ 	int i;
++@@ -3002,6 +3011,8 @@ static int renesas_eth_sw_probe(struct platform_device *pdev)
++ 
++ 	device_set_wakeup_capable(&pdev->dev, 1);
++ 
+++	glob_priv = priv;
+++
++ 	return 0;
++ }
++ 
++@@ -3023,6 +3034,8 @@ static int renesas_eth_sw_remove(struct platform_device *pdev)
++ 
++ 	platform_set_drvdata(pdev, NULL);
++ 
+++	glob_priv = NULL;
+++
++ 	return 0;
++ }
++ 
++diff --git a/drivers/net/ethernet/renesas/rswitch.h b/drivers/net/ethernet/renesas/rswitch.h
++index a109e4acadf6..c979e2f631e9 100644
++--- a/drivers/net/ethernet/renesas/rswitch.h
+++++ b/drivers/net/ethernet/renesas/rswitch.h
++@@ -216,3 +216,4 @@ int rswitch_rxdmac_init(struct net_device *ndev, struct rswitch_private *priv);
++ void rswitch_rxdmac_free(struct net_device *ndev, struct rswitch_private *priv);
++ 
++ int rswitch_poll(struct napi_struct *napi, int budget);
+++struct rswitch_private *rswitch_find_priv(void);
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0004-rswitch-allocate-chains-for-virtual-devices.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0004-rswitch-allocate-chains-for-virtual-devices.patch
+new file mode 100755
+index 0000000..6090db9
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0004-rswitch-allocate-chains-for-virtual-devices.patch
+@@ -0,0 +1,43 @@
++From 650f04ccc2d3f2cdc52ed896eab4964799579906 Mon Sep 17 00:00:00 2001
++From: Dung Nguyen <dung.nguyen.zy@renesas.com>
++Date: Tue, 20 Dec 2022 13:40:36 +0700
++Subject: [PATCH 04/20] rswitch: allocate chains for virtual devices
++
++Each virtual device (vmqN) need 4 chains: one pair for back-end
++and one pair for front-end.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Signed-off-by: Dung Nguyen <dung.nguyen.zy@renesas.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c | 8 +++++++-
++ 1 file changed, 7 insertions(+), 1 deletion(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index 721ea352c4d5..752257e6bf21 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -864,6 +864,10 @@ static bool sk_board;
++ module_param(sk_board, bool, 0644);
++ MODULE_PARM_DESC(sk_board, "Discriminate S4 Starter Kit and Spider board");
++ 
+++static int num_virt_devices = 6;
+++module_param(num_virt_devices, int, 0644);
+++MODULE_PARM_DESC(num_virt_devices, "Number of virtual interfaces");
+++
++ #define RSWITCH_TIMEOUT_MS	1000
++ 
++ /* HACK: store rswitch_priv globally so Xen backend can access it */
++@@ -2991,7 +2995,9 @@ static int renesas_eth_sw_probe(struct platform_device *pdev)
++ 
++ 	/* Fixed to use GWCA1 */
++ 	priv->gwca.index = 4;
++-	priv->gwca.num_chains = num_ndev * NUM_CHAINS_PER_NDEV;
+++	priv->gwca.num_chains = num_ndev * NUM_CHAINS_PER_NDEV +
+++		num_virt_devices * 2 * NUM_CHAINS_PER_NDEV;
+++
++ 	priv->gwca.chains = devm_kcalloc(&pdev->dev, priv->gwca.num_chains,
++ 					 sizeof(*priv->gwca.chains), GFP_KERNEL);
++ 	if (!priv->gwca.chains)
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0005-rswitch-export-functions-related-to-resource-allocat.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0005-rswitch-export-functions-related-to-resource-allocat.patch
+new file mode 100755
+index 0000000..602787a
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0005-rswitch-export-functions-related-to-resource-allocat.patch
+@@ -0,0 +1,102 @@
++From 999279de3da1ea7c9e80aa5c7a0ca725ee4dc07f Mon Sep 17 00:00:00 2001
++From: Dung Nguyen <dung.nguyen.zy@renesas.com>
++Date: Mon, 5 Dec 2022 20:49:35 +0700
++Subject: [PATCH 05/20] rswitch: export functions related to resource
++ allocation
++
++Those functions will be needed by both VMQ back-end and front-end.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Signed-off-by: Dung Nguyen <dung.nguyen.zy@renesas.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c | 14 ++++++++------
++ drivers/net/ethernet/renesas/rswitch.h |  9 +++++++++
++ 2 files changed, 17 insertions(+), 6 deletions(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index 752257e6bf21..526b58b0f2a5 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -2500,7 +2500,7 @@ static int rswitch_gwca_chain_ts_format(struct net_device *ndev,
++ 	return 0;
++ }
++ 
++-static int rswitch_desc_alloc(struct rswitch_private *priv)
+++int rswitch_desc_alloc(struct rswitch_private *priv)
++ {
++ 	struct device *dev = &priv->pdev->dev;
++ 	int i, num_chains = priv->gwca.num_chains;
++@@ -2516,7 +2516,7 @@ static int rswitch_desc_alloc(struct rswitch_private *priv)
++ 	return 0;
++ }
++ 
++-static void rswitch_desc_free(struct rswitch_private *priv)
+++void rswitch_desc_free(struct rswitch_private *priv)
++ {
++ 	if (priv->desc_bat)
++ 		dma_free_coherent(&priv->pdev->dev, priv->desc_bat_size,
++@@ -2524,7 +2524,7 @@ static void rswitch_desc_free(struct rswitch_private *priv)
++ 	priv->desc_bat = NULL;
++ }
++ 
++-static struct rswitch_gwca_chain *rswitch_gwca_get(struct rswitch_private *priv)
+++struct rswitch_gwca_chain *rswitch_gwca_get(struct rswitch_private *priv)
++ {
++ 	int index;
++ 
++@@ -2537,8 +2537,8 @@ static struct rswitch_gwca_chain *rswitch_gwca_get(struct rswitch_private *priv)
++ 	return &priv->gwca.chains[index];
++ }
++ 
++-static void rswitch_gwca_put(struct rswitch_private *priv,
++-			     struct rswitch_gwca_chain *c)
+++void rswitch_gwca_put(struct rswitch_private *priv,
+++		      struct rswitch_gwca_chain *c)
++ {
++ 	clear_bit(c->index, priv->gwca.used);
++ }
++@@ -2715,7 +2715,7 @@ static int rswitch_ndev_create(struct rswitch_private *priv, int index)
++ 	return err;
++ }
++ 
++-static void rswitch_ndev_unregister(struct rswitch_private *priv, int index)
+++void rswitch_ndev_unregister(struct rswitch_private *priv, int index)
++ {
++ 	struct rswitch_device *rdev = priv->rdev[index];
++ 	struct net_device *ndev = rdev->ndev;
++@@ -2725,6 +2725,8 @@ static void rswitch_ndev_unregister(struct rswitch_private *priv, int index)
++ 	unregister_netdev(ndev);
++ 	netif_napi_del(&rdev->napi);
++ 	free_netdev(ndev);
+++
+++	priv->rdev[index] = NULL;
++ }
++ 
++ static int rswitch_bpool_config(struct rswitch_private *priv)
++diff --git a/drivers/net/ethernet/renesas/rswitch.h b/drivers/net/ethernet/renesas/rswitch.h
++index c979e2f631e9..98c6bd090d5f 100644
++--- a/drivers/net/ethernet/renesas/rswitch.h
+++++ b/drivers/net/ethernet/renesas/rswitch.h
++@@ -210,10 +210,19 @@ struct rswitch_private {
++ extern const struct net_device_ops rswitch_netdev_ops;
++ 
++ int rswitch_txdmac_init(struct net_device *ndev, struct rswitch_private *priv);
+++struct rswitch_gwca_chain *rswitch_gwca_get(struct rswitch_private *priv);
+++void rswitch_gwca_put(struct rswitch_private *priv,
+++		      struct rswitch_gwca_chain *c);
+++
++ void rswitch_txdmac_free(struct net_device *ndev, struct rswitch_private *priv);
++ 
++ int rswitch_rxdmac_init(struct net_device *ndev, struct rswitch_private *priv);
++ void rswitch_rxdmac_free(struct net_device *ndev, struct rswitch_private *priv);
++ 
+++void rswitch_ndev_unregister(struct rswitch_private *priv, int index);
+++
++ int rswitch_poll(struct napi_struct *napi, int budget);
++ struct rswitch_private *rswitch_find_priv(void);
+++
+++int rswitch_desc_alloc(struct rswitch_private *priv);
+++void rswitch_desc_free(struct rswitch_private *priv);
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0006-rswitch-add-ability-to-allocate-chains-with-given-id.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0006-rswitch-add-ability-to-allocate-chains-with-given-id.patch
+new file mode 100755
+index 0000000..bcad03b
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0006-rswitch-add-ability-to-allocate-chains-with-given-id.patch
+@@ -0,0 +1,140 @@
++From 6bca5207f74242bd53b592c34492e78f39dfa674 Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Tue, 19 Apr 2022 20:10:12 +0300
++Subject: [PATCH 06/20] rswitch: add ability to allocate chains with given idx
++
++This is needed for VMQ front-end, as it will allocate two
++chains with indexes given by back-end.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c | 50 +++++++++++++++++++-------
++ drivers/net/ethernet/renesas/rswitch.h |  6 ++--
++ 2 files changed, 42 insertions(+), 14 deletions(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index 526b58b0f2a5..1657252552ad 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -2543,14 +2543,26 @@ void rswitch_gwca_put(struct rswitch_private *priv,
++ 	clear_bit(c->index, priv->gwca.used);
++ }
++ 
++-int rswitch_txdmac_init(struct net_device *ndev, struct rswitch_private *priv)
+++int rswitch_txdmac_init(struct net_device *ndev, struct rswitch_private *priv,
+++			int chain_num)
++ {
++ 	struct rswitch_device *rdev = netdev_priv(ndev);
++ 	int err;
++ 
++-	rdev->tx_chain = rswitch_gwca_get(priv);
++-	if (!rdev->tx_chain)
++-		return -EBUSY;
+++	if (chain_num < 0)
+++	{
+++		rdev->tx_chain = rswitch_gwca_get(priv);
+++		if (!rdev->tx_chain)
+++			return -EBUSY;
+++	}
+++	else
+++	{
+++		rdev->tx_chain = devm_kzalloc(&ndev->dev, sizeof(*rdev->rx_chain),
+++					      GFP_KERNEL);
+++		if (!rdev->tx_chain)
+++			return -ENOMEM;
+++		rdev->tx_chain->index = chain_num;
+++	}
++ 
++ 	err = rswitch_gwca_chain_init(ndev, priv, rdev->tx_chain, true, false,
++ 				      TX_RING_SIZE);
++@@ -2567,7 +2579,8 @@ int rswitch_txdmac_init(struct net_device *ndev, struct rswitch_private *priv)
++ 	rswitch_gwca_chain_free(ndev, priv, rdev->tx_chain);
++ 
++ out_init:
++-	rswitch_gwca_put(priv, rdev->tx_chain);
+++	if (priv)
+++		rswitch_gwca_put(priv, rdev->tx_chain);
++ 
++ 	return err;
++ }
++@@ -2581,14 +2594,26 @@ void rswitch_txdmac_free(struct net_device *ndev,
++ 	rswitch_gwca_put(priv, rdev->tx_chain);
++ }
++ 
++-int rswitch_rxdmac_init(struct net_device *ndev, struct rswitch_private *priv)
+++int rswitch_rxdmac_init(struct net_device *ndev, struct rswitch_private *priv,
+++			int chain_num)
++ {
++ 	struct rswitch_device *rdev = netdev_priv(ndev);
++ 	int err;
++ 
++-	rdev->rx_chain = rswitch_gwca_get(priv);
++-	if (!rdev->rx_chain)
++-		return -EBUSY;
+++	if (chain_num < 0)
+++	{
+++		rdev->rx_chain = rswitch_gwca_get(priv);
+++		if (!rdev->rx_chain)
+++			return -EBUSY;
+++	}
+++	else
+++	{
+++		rdev->rx_chain = devm_kzalloc(&ndev->dev, sizeof(*rdev->rx_chain),
+++					      GFP_KERNEL);
+++		if (!rdev->rx_chain)
+++			return -ENOMEM;
+++		rdev->rx_chain->index = chain_num;
+++	}
++ 
++ 	err = rswitch_gwca_chain_init(ndev, priv, rdev->rx_chain, false, true,
++ 				      RX_RING_SIZE);
++@@ -2605,7 +2630,8 @@ int rswitch_rxdmac_init(struct net_device *ndev, struct rswitch_private *priv)
++ 	rswitch_gwca_chain_free(ndev, priv, rdev->rx_chain);
++ 
++ out_init:
++-	rswitch_gwca_put(priv, rdev->rx_chain);
+++	if (priv)
+++		rswitch_gwca_put(priv, rdev->rx_chain);
++ 
++ 	return err;
++ }
++@@ -2692,11 +2718,11 @@ static int rswitch_ndev_create(struct rswitch_private *priv, int index)
++ 	 * CSD = 1 (rx_chain->index = 1) for FWPBFCS03. So, use index = 0
++ 	 * for the RX.
++ 	 */
++-	err = rswitch_rxdmac_init(ndev, priv);
+++	err = rswitch_rxdmac_init(ndev, priv, -1);
++ 	if (err < 0)
++ 		goto out_rxdmac;
++ 
++-	err = rswitch_txdmac_init(ndev, priv);
+++	err = rswitch_txdmac_init(ndev, priv, -1);
++ 	if (err < 0)
++ 		goto out_txdmac;
++ 
++diff --git a/drivers/net/ethernet/renesas/rswitch.h b/drivers/net/ethernet/renesas/rswitch.h
++index 98c6bd090d5f..c05d8f370ed6 100644
++--- a/drivers/net/ethernet/renesas/rswitch.h
+++++ b/drivers/net/ethernet/renesas/rswitch.h
++@@ -209,14 +209,16 @@ struct rswitch_private {
++ 
++ extern const struct net_device_ops rswitch_netdev_ops;
++ 
++-int rswitch_txdmac_init(struct net_device *ndev, struct rswitch_private *priv);
++ struct rswitch_gwca_chain *rswitch_gwca_get(struct rswitch_private *priv);
++ void rswitch_gwca_put(struct rswitch_private *priv,
++ 		      struct rswitch_gwca_chain *c);
++ 
+++int rswitch_txdmac_init(struct net_device *ndev, struct rswitch_private *priv,
+++			int chain_num);
++ void rswitch_txdmac_free(struct net_device *ndev, struct rswitch_private *priv);
++ 
++-int rswitch_rxdmac_init(struct net_device *ndev, struct rswitch_private *priv);
+++int rswitch_rxdmac_init(struct net_device *ndev, struct rswitch_private *priv,
+++			int chain_num);
++ void rswitch_rxdmac_free(struct net_device *ndev, struct rswitch_private *priv);
++ 
++ void rswitch_ndev_unregister(struct rswitch_private *priv, int index);
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0007-rswitch-factor-our-chain_register-function.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0007-rswitch-factor-our-chain_register-function.patch
+new file mode 100755
+index 0000000..35e93bd
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0007-rswitch-factor-our-chain_register-function.patch
+@@ -0,0 +1,136 @@
++From 8a3b10c81330a18289e9104dfe17c56b04ceb2de Mon Sep 17 00:00:00 2001
++From: Dung Nguyen <dung.nguyen.zy@renesas.com>
++Date: Mon, 5 Dec 2022 20:53:32 +0700
++Subject: [PATCH 07/20] rswitch: factor our chain_register() function
++
++There are code duplication across chain-related function.
++Move the common code into rswitch_gwca_chain_register() function
++and make it available to other parts of rswitch driver,
++because it will be used by front-end and back-end.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Signed-off-by: Dung Nguyen <dung.nguyen.zy@renesas.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c | 59 +++++++++++++++-----------
++ drivers/net/ethernet/renesas/rswitch.h |  2 +
++ 2 files changed, 36 insertions(+), 25 deletions(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index 1657252552ad..440c8c534fac 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -2367,7 +2367,7 @@ static int rswitch_gwca_chain_init(struct net_device *ndev,
++ 				struct rswitch_gwca_chain *c,
++ 				bool dir_tx, bool gptp, int num_ring)
++ {
++-	int i, bit;
+++	int i;
++ 	int index = c->index;	/* Keep the index before memset() */
++ 	struct sk_buff *skb;
++ 
++@@ -2403,13 +2403,6 @@ static int rswitch_gwca_chain_init(struct net_device *ndev,
++ 	if (!c->ts_ring && !c->ring)
++ 		goto out;
++ 
++-	index = c->index / 32;
++-	bit = BIT(c->index % 32);
++-	if (dir_tx)
++-		priv->gwca.tx_irq_bits[index] |= bit;
++-	else
++-		priv->gwca.rx_irq_bits[index] |= bit;
++-
++ 	return 0;
++ 
++ out:
++@@ -2418,12 +2411,42 @@ static int rswitch_gwca_chain_init(struct net_device *ndev,
++ 	return -ENOMEM;
++ }
++ 
+++void rswitch_gwca_chain_register(struct rswitch_private *priv,
+++				 struct rswitch_gwca_chain *c, bool ts)
+++{
+++	struct rswitch_desc *desc;
+++	int bit;
+++	int index;
+++
+++	desc = &priv->desc_bat[c->index];
+++	desc->die_dt = DT_LINKFIX;
+++	desc->dptrl = cpu_to_le32(lower_32_bits(c->ring_dma));
+++	desc->dptrh = cpu_to_le32(upper_32_bits(c->ring_dma));
+++
+++	index = c->index / 32;
+++	bit = BIT(c->index % 32);
+++
+++	if (!priv->addr)
+++		return;
+++
+++	if (c->dir_tx)
+++		priv->gwca.tx_irq_bits[index] |= bit;
+++	else
+++		priv->gwca.rx_irq_bits[index] |= bit;
+++
+++	/* FIXME: GWDCC_DCP */
+++	rs_write32(GWDCC_BALR | (c->dir_tx ? GWDCC_DQT : 0) |
+++		   (ts ? GWDCC_ETS : 0) |
+++		   GWDCC_EDE |
+++		   GWDCC_OSID(c->osid),
+++		   priv->addr + GWDCC_OFFS(c->index));
+++}
+++
++ static int rswitch_gwca_chain_format(struct net_device *ndev,
++ 				struct rswitch_private *priv,
++ 				struct rswitch_gwca_chain *c)
++ {
++ 	struct rswitch_ext_desc *ring;
++-	struct rswitch_desc *desc;
++ 	int tx_ring_size = sizeof(*ring) * c->num_ring;
++ 	int i;
++ 	dma_addr_t dma_addr;
++@@ -2447,14 +2470,7 @@ static int rswitch_gwca_chain_format(struct net_device *ndev,
++ 	ring->dptrh = cpu_to_le32(upper_32_bits(c->ring_dma));
++ 	ring->die_dt = DT_LINKFIX;
++ 
++-	desc = &priv->desc_bat[c->index];
++-	desc->die_dt = DT_LINKFIX;
++-	desc->dptrl = cpu_to_le32(lower_32_bits(c->ring_dma));
++-	desc->dptrh = cpu_to_le32(upper_32_bits(c->ring_dma));
++-
++-	/* FIXME: GWDCC_DCP */
++-	rs_write32(GWDCC_BALR | (c->dir_tx ? GWDCC_DQT : 0) | GWDCC_EDE,
++-		   priv->addr + GWDCC_OFFS(c->index));
+++	rswitch_gwca_chain_register(priv, c, false);
++ 
++ 	return 0;
++ }
++@@ -2488,14 +2504,7 @@ static int rswitch_gwca_chain_ts_format(struct net_device *ndev,
++ 	ring->dptrh = cpu_to_le32(upper_32_bits(c->ring_dma));
++ 	ring->die_dt = DT_LINKFIX;
++ 
++-	desc = &priv->desc_bat[c->index];
++-	desc->die_dt = DT_LINKFIX;
++-	desc->dptrl = cpu_to_le32(lower_32_bits(c->ring_dma));
++-	desc->dptrh = cpu_to_le32(upper_32_bits(c->ring_dma));
++-
++-	/* FIXME: GWDCC_DCP */
++-	rs_write32(GWDCC_BALR | (c->dir_tx ? GWDCC_DQT : 0) | GWDCC_ETS | GWDCC_EDE,
++-		  priv->addr + GWDCC_OFFS(c->index));
+++	rswitch_gwca_chain_register(priv, c, true);
++ 
++ 	return 0;
++ }
++diff --git a/drivers/net/ethernet/renesas/rswitch.h b/drivers/net/ethernet/renesas/rswitch.h
++index c05d8f370ed6..37c40e1a0035 100644
++--- a/drivers/net/ethernet/renesas/rswitch.h
+++++ b/drivers/net/ethernet/renesas/rswitch.h
++@@ -224,6 +224,8 @@ void rswitch_rxdmac_free(struct net_device *ndev, struct rswitch_private *priv);
++ void rswitch_ndev_unregister(struct rswitch_private *priv, int index);
++ 
++ int rswitch_poll(struct napi_struct *napi, int budget);
+++void rswitch_gwca_chain_register(struct rswitch_private *priv,
+++				 struct rswitch_gwca_chain *c, bool ts);
++ struct rswitch_private *rswitch_find_priv(void);
++ 
++ int rswitch_desc_alloc(struct rswitch_private *priv);
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0008-rswitch-add-definitions-for-OSID.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0008-rswitch-add-definitions-for-OSID.patch
+new file mode 100755
+index 0000000..4773542
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0008-rswitch-add-definitions-for-OSID.patch
+@@ -0,0 +1,41 @@
++From 457135a1198ec320095538509a08ea88346d2f28 Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Tue, 19 Apr 2022 20:59:35 +0300
++Subject: [PATCH 08/20] rswitch: add definitions for OSID
++
++OSID is used by back-end to configure chains that belong to
++other domain, so right IP-MMU interface will be used.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c | 1 +
++ drivers/net/ethernet/renesas/rswitch.h | 1 +
++ 2 files changed, 2 insertions(+)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index 440c8c534fac..89f324846a00 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -751,6 +751,7 @@ enum rswitch_etha_mode {
++ #define GWDCC_DQT		BIT(11)
++ #define GWDCC_ETS		BIT(9)
++ #define GWDCC_EDE		BIT(8)
+++#define GWDCC_OSID(val)		((val & 0x7) << 28)
++ 
++ #define GWMDNC_TXDMN(val)	((val & 0x1f) << 8)
++ 
++diff --git a/drivers/net/ethernet/renesas/rswitch.h b/drivers/net/ethernet/renesas/rswitch.h
++index 37c40e1a0035..4b61319b1c37 100644
++--- a/drivers/net/ethernet/renesas/rswitch.h
+++++ b/drivers/net/ethernet/renesas/rswitch.h
++@@ -117,6 +117,7 @@ struct rswitch_gwca_chain {
++ 	u32 num_ring;
++ 	u32 cur;
++ 	u32 dirty;
+++	u32 osid;
++ 	struct sk_buff **skb;
++ 
++ 	struct net_device *ndev;	/* chain to ndev for irq */
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0009-rswitch-fix-issue-with-interrupts-for-un-used-chains.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0009-rswitch-fix-issue-with-interrupts-for-un-used-chains.patch
+new file mode 100755
+index 0000000..14ca5bb
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0009-rswitch-fix-issue-with-interrupts-for-un-used-chains.patch
+@@ -0,0 +1,26 @@
++From a8e7aec48eacb38d95e7ea3f34f9c732df6c627b Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Tue, 19 Apr 2022 21:01:14 +0300
++Subject: [PATCH 09/20] rswitch: fix issue with interrupts for un-used chains
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c | 2 +-
++ 1 file changed, 1 insertion(+), 1 deletion(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index 89f324846a00..2c4f5b86d7f5 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -2798,7 +2798,7 @@ static irqreturn_t __maybe_unused rswitch_data_irq(struct rswitch_private *priv,
++ 		c = &priv->gwca.chains[i];
++ 		index = c->index / 32;
++ 		bit = BIT(c->index % 32);
++-		if (!(dis[index] & bit))
+++		if (!(dis[index] & bit) || !(test_bit(i , priv->gwca.used)))
++ 			continue;
++ 
++ 		rswitch_ack_data_irq(priv, c->index);
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0010-HACK-rswitch-allocated-descriptors-from-reserved-mem.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0010-HACK-rswitch-allocated-descriptors-from-reserved-mem.patch
+new file mode 100755
+index 0000000..3a3b3bf
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0010-HACK-rswitch-allocated-descriptors-from-reserved-mem.patch
+@@ -0,0 +1,74 @@
++From bb085a5b297fbb58551d70f4ab481795352a09c6 Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Tue, 19 Apr 2022 21:32:30 +0300
++Subject: [PATCH 10/20] [HACK] rswitch: allocated descriptors from reserved
++ memory
++
++This is breaking change that requires similar change in device tree.
++
++It is needed because current rswitch GWCA implementation prevents proper
++chain initialization with different OSIDs. As a workaround, we are need
++to allocate LINKFIX table (aka base descriptors) exactly on the same
++address for all domains. To achieve this, we need to provide and use
++reserved memory page at a fixed address.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c | 25 +++++++++++++++++++++----
++ 1 file changed, 21 insertions(+), 4 deletions(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index 2c4f5b86d7f5..3b4dc9d06eec 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -17,6 +17,7 @@
++ #include <linux/of_irq.h>
++ #include <linux/of_mdio.h>
++ #include <linux/of_net.h>
+++#include <linux/of_address.h>
++ #include <linux/clk.h>
++ #include <linux/pm_runtime.h>
++ #include <linux/slab.h>
++@@ -2514,10 +2515,27 @@ int rswitch_desc_alloc(struct rswitch_private *priv)
++ {
++ 	struct device *dev = &priv->pdev->dev;
++ 	int i, num_chains = priv->gwca.num_chains;
+++	struct resource r;
+++	struct device_node *node;
+++	int ret;
+++
+++	node = of_parse_phandle(dev->of_node, "memory-region", 0);
+++	if (!node) {
+++		dev_err(dev, "no memory-region specified\n");
+++		return -EINVAL;
+++	}
+++
+++	ret = of_address_to_resource(node, 0, &r);
+++
+++	of_node_put(node);
+++
+++	if (ret)
+++		return ret;
++ 
++ 	priv->desc_bat_size = sizeof(struct rswitch_desc) * num_chains;
++-	priv->desc_bat = dma_alloc_coherent(dev, priv->desc_bat_size,
++-					    &priv->desc_bat_dma, GFP_KERNEL);
+++	priv->desc_bat_dma = r.start;
+++	priv->desc_bat = memremap(r.start, resource_size(&r), MEMREMAP_WB);
+++
++ 	if (!priv->desc_bat)
++ 		return -ENOMEM;
++ 	for (i = 0; i < num_chains; i++)
++@@ -2529,8 +2547,7 @@ int rswitch_desc_alloc(struct rswitch_private *priv)
++ void rswitch_desc_free(struct rswitch_private *priv)
++ {
++ 	if (priv->desc_bat)
++-		dma_free_coherent(&priv->pdev->dev, priv->desc_bat_size,
++-				  priv->desc_bat, priv->desc_bat_dma);
+++		memunmap(priv->desc_bat);
++ 	priv->desc_bat = NULL;
++ }
++ 
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0011-rswitch-add-Xen-PV-back-end-driver.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0011-rswitch-add-Xen-PV-back-end-driver.patch
+new file mode 100755
+index 0000000..5de4980
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0011-rswitch-add-Xen-PV-back-end-driver.patch
+@@ -0,0 +1,603 @@
++From b71fab001bb7f6c2b002a4628e909ae2c5e0f2df Mon Sep 17 00:00:00 2001
++From: Dung Nguyen <dung.nguyen.zy@renesas.com>
++Date: Tue, 20 Dec 2022 13:46:58 +0700
++Subject: [PATCH 11/20] rswitch: add Xen PV back-end driver
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Signed-off-by: Dung Nguyen <dung.nguyen.zy@renesas.com>
++---
++ drivers/net/ethernet/renesas/Kconfig          |   8 +
++ drivers/net/ethernet/renesas/Makefile         |   1 +
++ drivers/net/ethernet/renesas/rswitch.c        |  28 +-
++ drivers/net/ethernet/renesas/rswitch.h        |   7 +
++ .../net/ethernet/renesas/rswitch_xenback.c    | 461 ++++++++++++++++++
++ 5 files changed, 499 insertions(+), 6 deletions(-)
++ create mode 100644 drivers/net/ethernet/renesas/rswitch_xenback.c
++
++diff --git a/drivers/net/ethernet/renesas/Kconfig b/drivers/net/ethernet/renesas/Kconfig
++index 497a5874a6c3..6a093176a17f 100644
++--- a/drivers/net/ethernet/renesas/Kconfig
+++++ b/drivers/net/ethernet/renesas/Kconfig
++@@ -53,6 +53,14 @@ config RENESAS_ETHER_SWITCH
++ 	  This driver supports the following SoCs:
++ 		- R8A779Fx.
++ 
+++config RENESAS_ETHER_SWITCH_XENBACK
+++	tristate "Xen PV backend for Renesas Ethernet Switch"
+++	depends on RENESAS_ETHER_SWITCH || COMPILE_TEST
+++	help
+++	  Xen PV backend for Renesas Ethernet Switch.
+++	  Enable this if you want to share switch with
+++	  other Xen-based virtual machines.
+++
++ config RTSN
++         tristate "Renesas Ethernet-TSN support"
++         depends on ARCH_RENESAS || COMPILE_TEST
++diff --git a/drivers/net/ethernet/renesas/Makefile b/drivers/net/ethernet/renesas/Makefile
++index d52ae998fc6b..3b844eb41bfd 100644
++--- a/drivers/net/ethernet/renesas/Makefile
+++++ b/drivers/net/ethernet/renesas/Makefile
++@@ -10,6 +10,7 @@ ravb-objs := ravb_main.o ravb_ptp.o
++ obj-$(CONFIG_RAVB) += ravb.o
++ 
++ obj-$(CONFIG_RENESAS_ETHER_SWITCH) += rswitch.o
+++obj-$(CONFIG_RENESAS_ETHER_SWITCH_XENBACK) += rswitch_xenback.o
++ 
++ rtsn_drv-objs := rtsn.o rtsn_ptp.o
++ 
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index 3b4dc9d06eec..e979f1fe55ea 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -971,6 +971,22 @@ static void rswitch_enadis_data_irq(struct rswitch_private *priv, int index, boo
++ 	rs_write32(BIT(index % 32) | tmp, priv->addr + offs);
++ }
++ 
+++void rswitch_enadis_rdev_irqs(struct rswitch_device *rdev, bool enable)
+++{
+++	if (!rswitch_is_front_dev(rdev))
+++	{
+++		rswitch_enadis_data_irq(rdev->priv, rdev->rx_chain->index,
+++					enable);
+++		rswitch_enadis_data_irq(rdev->priv, rdev->tx_chain->index,
+++					enable);
+++	}
+++	else
+++	{
+++		if (enable)
+++			rswitch_vmq_front_rx_done(rdev);
+++	}
+++}
+++
++ static void rswitch_ack_data_irq(struct rswitch_private *priv, int index)
++ {
++ 	u32 offs = GWDIS0 + (index / 32) * 0x10;
++@@ -1125,7 +1141,6 @@ int rswitch_poll(struct napi_struct *napi, int budget)
++ {
++ 	struct net_device *ndev = napi->dev;
++ 	struct rswitch_device *rdev = netdev_priv(ndev);
++-	struct rswitch_private *priv = rdev->priv;
++ 	int quota = budget;
++ 
++ retry:
++@@ -1141,8 +1156,7 @@ int rswitch_poll(struct napi_struct *napi, int budget)
++ 	napi_complete(napi);
++ 
++ 	/* Re-enable RX/TX interrupts */
++-	rswitch_enadis_data_irq(priv, rdev->tx_chain->index, true);
++-	rswitch_enadis_data_irq(priv, rdev->rx_chain->index, true);
+++	rswitch_enadis_rdev_irqs(rdev, true);
++ 	__iowmb();
++ 
++ out:
++@@ -1977,8 +1991,7 @@ static int rswitch_open(struct net_device *ndev)
++ 
++ 	/* Enable interrupt */
++ 	pr_debug("%s: tx = %d, rx = %d\n", __func__, rdev->tx_chain->index, rdev->rx_chain->index);
++-	rswitch_enadis_data_irq(rdev->priv, rdev->tx_chain->index, true);
++-	rswitch_enadis_data_irq(rdev->priv, rdev->rx_chain->index, true);
+++	rswitch_enadis_rdev_irqs(rdev, true);
++ 	if (sk_board) {
++ 		netif_device_attach(ndev);
++ 		netif_carrier_on(ndev);
++@@ -2819,7 +2832,10 @@ static irqreturn_t __maybe_unused rswitch_data_irq(struct rswitch_private *priv,
++ 			continue;
++ 
++ 		rswitch_ack_data_irq(priv, c->index);
++-		rswitch_queue_interrupt(c->ndev);
+++		if (!c->back_info)
+++			rswitch_queue_interrupt(c->ndev);
+++		else
+++			rswitch_vmq_back_data_irq(c);
++ 	}
++ 
++ 	return IRQ_HANDLED;
++diff --git a/drivers/net/ethernet/renesas/rswitch.h b/drivers/net/ethernet/renesas/rswitch.h
++index 4b61319b1c37..7e333caca5f2 100644
++--- a/drivers/net/ethernet/renesas/rswitch.h
+++++ b/drivers/net/ethernet/renesas/rswitch.h
++@@ -227,7 +227,14 @@ void rswitch_ndev_unregister(struct rswitch_private *priv, int index);
++ int rswitch_poll(struct napi_struct *napi, int budget);
++ void rswitch_gwca_chain_register(struct rswitch_private *priv,
++ 				 struct rswitch_gwca_chain *c, bool ts);
+++
+++void rswitch_trigger_chain(struct rswitch_private *priv,
+++			   struct rswitch_gwca_chain *chain);
+++void rswitch_enadis_rdev_irqs(struct rswitch_device *rdev, bool enable);
+++
++ struct rswitch_private *rswitch_find_priv(void);
++ 
+++void rswitch_vmq_back_data_irq(struct rswitch_gwca_chain *c);
+++
++ int rswitch_desc_alloc(struct rswitch_private *priv);
++ void rswitch_desc_free(struct rswitch_private *priv);
++diff --git a/drivers/net/ethernet/renesas/rswitch_xenback.c b/drivers/net/ethernet/renesas/rswitch_xenback.c
++new file mode 100644
++index 000000000000..e99fb2d898e2
++--- /dev/null
+++++ b/drivers/net/ethernet/renesas/rswitch_xenback.c
++@@ -0,0 +1,461 @@
+++// SPDX-License-Identifier: GPL-2.0
+++/* Renesas Ethernet Switch Para-Virtualized driver
+++ *
+++ * Copyright (C) 2022 EPAM Systems
+++ */
+++
+++#include "linux/err.h"
+++#include <linux/etherdevice.h>
+++#include <linux/platform_device.h>
+++#include <xen/interface/grant_table.h>
+++#include <xen/grant_table.h>
+++#include <xen/xenbus.h>
+++#include <xen/events.h>
+++#include <xen/page.h>
+++#include "rswitch.h"
+++
+++/* TODO: get this from rswitch.c */
+++#define RSWITCH_BACK_BASE_INDEX		3
+++
+++struct rswitch_vmq_back_info {
+++	char name[32];
+++	struct xenbus_device *dev;
+++	struct rswitch_device *rdev;
+++
+++	/* This is the state that will be reflected in xenstore when any
+++	 * active hotplug script completes.
+++	 */
+++	enum xenbus_state state;
+++	enum xenbus_state frontend_state;
+++	struct rswitch_gwca_chain *tx_chain;
+++	struct rswitch_gwca_chain *rx_chain;
+++	struct rswitch_private *rswitch_priv;
+++	evtchn_port_t tx_evtchn;
+++	evtchn_port_t rx_evtchn;
+++	int tx_irq;
+++	int rx_irq;
+++
+++	uint32_t osid;
+++	uint32_t if_num;
+++};
+++
+++static struct rswitch_device*
+++rswitch_vmq_back_ndev_register(struct rswitch_private *priv, int index)
+++{
+++	struct platform_device *pdev = priv->pdev;
+++	struct net_device *ndev;
+++	struct rswitch_device *rdev;
+++	int err;
+++
+++	ndev = alloc_etherdev_mqs(sizeof(struct rswitch_device), 1, 1);
+++	if (!ndev)
+++		return ERR_PTR(-ENOMEM);
+++
+++	SET_NETDEV_DEV(ndev, &pdev->dev);
+++	ether_setup(ndev);
+++
+++	rdev = netdev_priv(ndev);
+++	rdev->ndev = ndev;
+++	rdev->priv = priv;
+++	priv->rdev[RSWITCH_BACK_BASE_INDEX + index] = rdev;
+++	rdev->port = 3;
+++	rdev->etha = NULL;
+++	rdev->remote_chain = -1;
+++
+++	rdev->addr = priv->addr;
+++
+++	spin_lock_init(&rdev->lock);
+++
+++	ndev->features = NETIF_F_RXCSUM;
+++	ndev->hw_features = NETIF_F_RXCSUM;
+++	ndev->base_addr = (unsigned long)rdev->addr;
+++	snprintf(ndev->name, IFNAMSIZ, "vmq%d", index);
+++	ndev->netdev_ops = &rswitch_netdev_ops;
+++
+++	netif_napi_add(ndev, &rdev->napi, rswitch_poll, 64);
+++
+++	eth_hw_addr_random(ndev);
+++
+++	/* Network device register */
+++	err = register_netdev(ndev);
+++	if (err)
+++		goto out_reg_netdev;
+++
+++	err = rswitch_rxdmac_init(ndev, priv, -1);
+++	if (err < 0)
+++		goto out_rxdmac;
+++
+++	err = rswitch_txdmac_init(ndev, priv, -1);
+++	if (err < 0)
+++		goto out_txdmac;
+++
+++	/* Print device information */
+++	netdev_info(ndev, "MAC address %pMn", ndev->dev_addr);
+++
+++	return rdev;
+++
+++out_txdmac:
+++	rswitch_rxdmac_free(ndev, priv);
+++
+++out_rxdmac:
+++	unregister_netdev(ndev);
+++
+++out_reg_netdev:
+++	netif_napi_del(&rdev->napi);
+++	free_netdev(ndev);
+++
+++	return ERR_PTR(err);
+++}
+++
+++static void rswitch_vmq_back_disconnect(struct xenbus_device *dev)
+++{
+++	struct rswitch_vmq_back_info *be = dev_get_drvdata(&dev->dev);
+++
+++	if (be->rx_irq)
+++		unbind_from_irqhandler(be->rx_irq, be);
+++	if (be->tx_irq)
+++		unbind_from_irqhandler(be->tx_irq, be);
+++	be->tx_irq = 0;
+++	be->rx_irq = 0;
+++}
+++
+++static int rswitch_vmq_back_remove(struct xenbus_device *dev)
+++{
+++	struct rswitch_vmq_back_info *be = dev_get_drvdata(&dev->dev);
+++
+++	if (be->rdev) {
+++		rswitch_vmq_back_disconnect(dev);
+++		rswitch_ndev_unregister(be->rswitch_priv,
+++					RSWITCH_BACK_BASE_INDEX + be->if_num);
+++		be->rdev = NULL;
+++	}
+++
+++	if (be->rx_chain)
+++		rswitch_gwca_put(be->rswitch_priv, be->rx_chain);
+++	if (be->tx_chain)
+++		rswitch_gwca_put(be->rswitch_priv, be->tx_chain);
+++
+++	kfree(be);
+++
+++	dev_set_drvdata(&dev->dev, NULL);
+++
+++	return 0;
+++}
+++
+++/**
+++ * Entry point to this code when a new device is created.  Allocate the basic
+++ * structures and switch to InitWait.
+++ */
+++static int rswitch_vmq_back_probe(struct xenbus_device *dev,
+++				  const struct xenbus_device_id *id)
+++{
+++	int err = 0;
+++	struct xenbus_transaction xbt;
+++
+++	struct rswitch_vmq_back_info *be = kzalloc(sizeof(*be), GFP_KERNEL);
+++
+++	if (!be) {
+++		xenbus_dev_fatal(dev, -ENOMEM,
+++				 "allocating backend structure");
+++		return -ENOMEM;
+++	}
+++
+++	be->dev = dev;
+++	be->rswitch_priv = rswitch_find_priv();
+++	if (!be->rswitch_priv)
+++	{
+++		xenbus_dev_fatal(dev, -ENODEV, "Failed to get rswitch priv data");
+++		return -ENODEV;
+++	}
+++	be->tx_chain = rswitch_gwca_get(be->rswitch_priv);
+++	be->rx_chain = rswitch_gwca_get(be->rswitch_priv);
+++	if (!be->rx_chain || !be->tx_chain)
+++	{
+++		err = -ENODEV;
+++		goto fail;
+++	}
+++
+++	be->tx_chain->back_info = be;
+++	be->rx_chain->back_info = be;
+++	be->tx_chain->dir_tx = true;
+++	be->rx_chain->dir_tx = false;
+++	dev_set_drvdata(&dev->dev, be);
+++
+++	be->osid = xenbus_read_unsigned(dev->otherend, "osid", 255);
+++	be->tx_chain->osid = be->osid;
+++	be->rx_chain->osid = be->osid;
+++
+++	snprintf(be->name, sizeof(be->name) - 1, "rswitch-vmq-osid%d", be->osid);
+++
+++	be->if_num = xenbus_read_unsigned(dev->otherend, "if-num", 255);
+++
+++	be->rdev = rswitch_vmq_back_ndev_register(be->rswitch_priv, be->if_num);
+++	if (IS_ERR(be->rdev))
+++	{
+++		err = PTR_ERR(be->rdev);
+++		xenbus_dev_fatal(dev, err, "Failed to allocate local rdev: %d ", err);
+++		return err;
+++	}
+++
+++	do {
+++		err = xenbus_transaction_start(&xbt);
+++		if (err)
+++			goto fail;
+++
+++		err = xenbus_printf(xbt, dev->nodename, "tx-chain-id", "%d",
+++				    be->tx_chain->index);
+++		if (err)
+++			goto abort_transaction;
+++		err = xenbus_printf(xbt, dev->nodename, "rx-chain-id", "%d",
+++				    be->rx_chain->index);
+++		if (err)
+++			goto abort_transaction;
+++
+++		err = xenbus_printf(xbt, dev->nodename, "remote-chain-id", "%d",
+++				    be->rdev->rx_chain->index);
+++		if (err)
+++			goto abort_transaction;
+++
+++		err = xenbus_transaction_end(xbt, 0);
+++	} while (err == -EAGAIN);
+++
+++	if (err) {
+++		xenbus_dev_fatal(dev, err, "completing transaction");
+++		goto fail;
+++	}
+++
+++	xenbus_switch_state(dev, XenbusStateInitWait);
+++
+++	return 0;
+++
+++abort_transaction:
+++	xenbus_transaction_end(xbt, 1);
+++	xenbus_dev_fatal(dev, err, "Failed to write xenstore info\n");
+++fail:
+++	if (be->rx_chain)
+++		rswitch_gwca_put(be->rswitch_priv, be->rx_chain);
+++	if (be->tx_chain)
+++		rswitch_gwca_put(be->rswitch_priv, be->tx_chain);
+++
+++	return err;
+++}
+++
+++void rswitch_vmq_back_data_irq(struct rswitch_gwca_chain *c)
+++{
+++	struct rswitch_vmq_back_info *be = c->back_info;
+++
+++	notify_remote_via_evtchn(be->rx_evtchn);
+++	notify_remote_via_evtchn(be->tx_evtchn);
+++}
+++
+++static irqreturn_t rswitch_vmq_back_rx_interrupt(int irq, void *dev_id)
+++{
+++	struct rswitch_vmq_back_info *be = dev_id;
+++
+++	rswitch_enadis_rdev_irqs(be->rdev, true);
+++
+++	xen_irq_lateeoi(irq, 0);
+++
+++	return IRQ_HANDLED;
+++}
+++
+++static irqreturn_t rswitch_vmq_back_tx_interrupt(int irq, void *dev_id)
+++{
+++	struct rswitch_vmq_back_info *be = dev_id;
+++
+++	rswitch_trigger_chain(be->rswitch_priv, be->tx_chain);
+++
+++	xen_irq_lateeoi(irq, 0);
+++
+++	return IRQ_HANDLED;
+++}
+++
+++
+++static int rswitch_vmq_back_connect(struct xenbus_device *dev)
+++{
+++	struct rswitch_vmq_back_info *be = dev_get_drvdata(&dev->dev);
+++	unsigned int tx_evt;
+++	unsigned int rx_evt;
+++	int err;
+++
+++	err = xenbus_gather(XBT_NIL, dev->otherend,
+++			    "tx-evtch", "%u", &tx_evt,
+++			    "rx-evtch", "%u", &rx_evt,
+++			    NULL);
+++	if (err)
+++	{
+++		xenbus_dev_fatal(dev, err, "Failed to read front-end info: %d", err);
+++		return err;
+++	}
+++
+++	be->tx_evtchn = tx_evt;
+++	be->rx_evtchn = rx_evt;
+++
+++	err = bind_interdomain_evtchn_to_irqhandler_lateeoi(
+++		dev->otherend_id, tx_evt, rswitch_vmq_back_tx_interrupt, 0,
+++		be->name, be);
+++	if (err < 0)
+++	{
+++		xenbus_dev_fatal(dev, err, "Failed to bind tx_evt IRQ: %d", err);
+++		return err;
+++	}
+++	be->tx_irq = err;
+++
+++	err = bind_interdomain_evtchn_to_irqhandler_lateeoi(
+++		dev->otherend_id , rx_evt, rswitch_vmq_back_rx_interrupt, 0,
+++		be->name, be);
+++	if (err < 0)
+++	{
+++		xenbus_dev_fatal(dev, err, "Failed to bind rx_evt IRQ: %d", err);
+++		return err;
+++	}
+++	be->rx_irq = err;
+++
+++	rswitch_gwca_chain_register(be->rswitch_priv, be->tx_chain, false);
+++	rswitch_gwca_chain_register(be->rswitch_priv, be->rx_chain, true);
+++
+++	notify_remote_via_evtchn(tx_evt);
+++	notify_remote_via_evtchn(rx_evt);
+++
+++	be->rdev->remote_chain = be->rx_chain->index;
+++
+++	return 0;
+++}
+++
+++static void set_backend_state(struct xenbus_device *dev,
+++			      enum xenbus_state state)
+++{
+++	while (dev->state != state) {
+++		switch (dev->state) {
+++		case XenbusStateClosed:
+++			switch (state) {
+++			case XenbusStateInitWait:
+++			case XenbusStateConnected:
+++				xenbus_switch_state(dev, XenbusStateInitWait);
+++				break;
+++			case XenbusStateClosing:
+++				xenbus_switch_state(dev, XenbusStateClosing);
+++				break;
+++			default:
+++				WARN_ON(1);
+++			}
+++			break;
+++		case XenbusStateInitWait:
+++		case XenbusStateInitialised:
+++			switch (state) {
+++			case XenbusStateConnected:
+++				if (rswitch_vmq_back_connect(dev))
+++					return;
+++				xenbus_switch_state(dev, XenbusStateConnected);
+++				break;
+++			case XenbusStateClosing:
+++			case XenbusStateClosed:
+++				xenbus_switch_state(dev, XenbusStateClosing);
+++				break;
+++			default:
+++				WARN_ON(1);
+++			}
+++			break;
+++		case XenbusStateConnected:
+++			switch (state) {
+++			case XenbusStateInitWait:
+++			case XenbusStateClosing:
+++			case XenbusStateClosed:
+++				rswitch_vmq_back_disconnect(dev);
+++				xenbus_switch_state(dev, XenbusStateClosing);
+++				break;
+++			default:
+++				WARN_ON(1);
+++			}
+++			break;
+++		case XenbusStateClosing:
+++			switch (state) {
+++			case XenbusStateInitWait:
+++			case XenbusStateConnected:
+++			case XenbusStateClosed:
+++				xenbus_switch_state(dev, XenbusStateClosed);
+++				break;
+++			default:
+++				WARN_ON(1);
+++			}
+++			break;
+++		default:
+++			WARN_ON(1);
+++		}
+++	}
+++}
+++
+++/**
+++ * Callback received when the frontend's state changes.
+++ */
+++static void rswitch_vmq_frontend_changed(struct xenbus_device *dev,
+++					 enum xenbus_state frontend_state)
+++{
+++	struct rswitch_vmq_back_info *be = dev_get_drvdata(&dev->dev);
+++
+++	be->frontend_state = frontend_state;
+++
+++	switch (frontend_state) {
+++	case XenbusStateInitialising:
+++		set_backend_state(dev, XenbusStateInitWait);
+++		break;
+++
+++	case XenbusStateInitialised:
+++	case XenbusStateConnected:
+++		set_backend_state(dev, XenbusStateConnected);
+++		break;
+++
+++	case XenbusStateReconfiguring:
+++		xenbus_switch_state(dev, XenbusStateReconfigured);
+++		break;
+++
+++	case XenbusStateClosing:
+++		set_backend_state(dev, XenbusStateClosing);
+++		break;
+++
+++	case XenbusStateClosed:
+++		set_backend_state(dev, XenbusStateClosed);
+++		if (xenbus_dev_is_online(dev))
+++			break;
+++		fallthrough;	/* if not online */
+++	case XenbusStateUnknown:
+++		set_backend_state(dev, XenbusStateClosed);
+++		device_unregister(&dev->dev);
+++		break;
+++
+++	default:
+++		xenbus_dev_fatal(dev, -EINVAL, "saw state %d at frontend",
+++				 frontend_state);
+++		break;
+++	}
+++}
+++
+++static const struct xenbus_device_id rswitch_vmq_ids[] = {
+++	{ "renesas_vmq" },
+++	{ "" }
+++};
+++
+++static struct xenbus_driver rswitch_vmq_driver = {
+++	.ids = rswitch_vmq_ids,
+++	.probe = rswitch_vmq_back_probe,
+++	.remove = rswitch_vmq_back_remove,
+++	.otherend_changed = rswitch_vmq_frontend_changed,
+++	.allow_rebind = false,
+++};
+++
+++static int __init rswitch_vmq_back_init(void)
+++{
+++	if (!xen_domain())
+++		return -ENODEV;
+++
+++	return xenbus_register_backend(&rswitch_vmq_driver);
+++}
+++
+++module_init(rswitch_vmq_back_init);
+++
+++static void rswitch_vmq_back_exit(void)
+++{
+++	return xenbus_unregister_driver(&rswitch_vmq_driver);
+++}
+++
+++module_exit(rswitch_vmq_back_exit);
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0012-rswitch-add-XEN-PV-front-end-driver.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0012-rswitch-add-XEN-PV-front-end-driver.patch
+new file mode 100755
+index 0000000..aff0fb1
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0012-rswitch-add-XEN-PV-front-end-driver.patch
+@@ -0,0 +1,675 @@
++From ff28fbe897d8e8c5385df362624e310965c46372 Mon Sep 17 00:00:00 2001
++From: Dung Nguyen <dung.nguyen.zy@renesas.com>
++Date: Tue, 20 Dec 2022 13:50:04 +0700
++Subject: [PATCH 12/20] rswitch: add XEN PV front-end driver
++
++Now it is possible to use rswitch VMQ from other domains.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Signed-off-by: Dung Nguyen <dung.nguyen.zy@renesas.com>
++---
++ drivers/net/ethernet/renesas/Kconfig          |   8 +
++ drivers/net/ethernet/renesas/Makefile         |   1 +
++ drivers/net/ethernet/renesas/rswitch.c        |  26 +-
++ drivers/net/ethernet/renesas/rswitch.h        |  15 +
++ .../net/ethernet/renesas/rswitch_xenfront.c   | 497 ++++++++++++++++++
++ 5 files changed, 541 insertions(+), 6 deletions(-)
++ create mode 100644 drivers/net/ethernet/renesas/rswitch_xenfront.c
++
++diff --git a/drivers/net/ethernet/renesas/Kconfig b/drivers/net/ethernet/renesas/Kconfig
++index 6a093176a17f..4b80ffc32c34 100644
++--- a/drivers/net/ethernet/renesas/Kconfig
+++++ b/drivers/net/ethernet/renesas/Kconfig
++@@ -61,6 +61,14 @@ config RENESAS_ETHER_SWITCH_XENBACK
++ 	  Enable this if you want to share switch with
++ 	  other Xen-based virtual machines.
++ 
+++config RENESAS_ETHER_SWITCH_XENFRONT
+++	tristate "Xen PV frontend for Renesas Ethernet Switch"
+++	depends on RENESAS_ETHER_SWITCH || COMPILE_TEST
+++	help
+++	  Xen PV front for Renesas Ethernet Switch.
+++	  Enable this if you want to access R-Switch from
+++	  your virtual machine.
+++
++ config RTSN
++         tristate "Renesas Ethernet-TSN support"
++         depends on ARCH_RENESAS || COMPILE_TEST
++diff --git a/drivers/net/ethernet/renesas/Makefile b/drivers/net/ethernet/renesas/Makefile
++index 3b844eb41bfd..eeb32cf8f3e5 100644
++--- a/drivers/net/ethernet/renesas/Makefile
+++++ b/drivers/net/ethernet/renesas/Makefile
++@@ -11,6 +11,7 @@ obj-$(CONFIG_RAVB) += ravb.o
++ 
++ obj-$(CONFIG_RENESAS_ETHER_SWITCH) += rswitch.o
++ obj-$(CONFIG_RENESAS_ETHER_SWITCH_XENBACK) += rswitch_xenback.o
+++obj-$(CONFIG_RENESAS_ETHER_SWITCH_XENFRONT) += rswitch_xenfront.o
++ 
++ rtsn_drv-objs := rtsn.o rtsn_ptp.o
++ 
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index e979f1fe55ea..d1c0f5835614 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -987,6 +987,15 @@ void rswitch_enadis_rdev_irqs(struct rswitch_device *rdev, bool enable)
++ 	}
++ }
++ 
+++void rswitch_trigger_chain(struct rswitch_private *priv,
+++			   struct rswitch_gwca_chain *chain)
+++{
+++	if (!rswitch_is_front_priv(priv))
+++		rswitch_modify(priv->addr, GWTRC0, 0, BIT(chain->index));
+++	else
+++		rswitch_vmq_front_trigger_tx(netdev_priv(chain->ndev));
+++}
+++
++ static void rswitch_ack_data_irq(struct rswitch_private *priv, int index)
++ {
++ 	u32 offs = GWDIS0 + (index / 32) * 0x10;
++@@ -1033,7 +1042,8 @@ static bool rswitch_rx(struct net_device *ndev, int *quota)
++ 		c->skb[entry] = NULL;
++ 		dma_addr = le32_to_cpu(desc->dptrl) | ((__le64)le32_to_cpu(desc->dptrh) << 32);
++ 		dma_unmap_single(ndev->dev.parent, dma_addr, PKT_BUF_SZ, DMA_FROM_DEVICE);
++-		get_ts = rdev->priv->ptp_priv->tstamp_rx_ctrl & RTSN_RXTSTAMP_TYPE_V2_L2_EVENT;
+++		if (!rswitch_is_front_dev(rdev))
+++			get_ts = rdev->priv->ptp_priv->tstamp_rx_ctrl & RTSN_RXTSTAMP_TYPE_V2_L2_EVENT;
++ 		if (get_ts) {
++ 			struct skb_shared_hwtstamps *shhwtstamps;
++ 			struct timespec64 ts;
++@@ -1092,7 +1102,7 @@ static void rswitch_get_timestamp(struct rswitch_private *priv,
++ 	ptp_priv->info.gettime64(&ptp_priv->info, ts);
++ }
++ 
++-static int rswitch_tx_free(struct net_device *ndev, bool free_txed_only)
+++int rswitch_tx_free(struct net_device *ndev, bool free_txed_only)
++ {
++ 	struct rswitch_device *rdev = netdev_priv(ndev);
++ 	struct rswitch_ext_desc *desc;
++@@ -1112,7 +1122,8 @@ static int rswitch_tx_free(struct net_device *ndev, bool free_txed_only)
++ 		size = le16_to_cpu(desc->info_ds) & TX_DS;
++ 		skb = c->skb[entry];
++ 		if (skb) {
++-			if (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) {
+++			if (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP &&
+++			    !rswitch_is_front_dev(rdev)) {
++ 				struct skb_shared_hwtstamps shhwtstamps;
++ 				struct timespec64 ts;
++ 
++@@ -1987,7 +1998,8 @@ static int rswitch_open(struct net_device *ndev)
++ 	netif_start_queue(ndev);
++ 
++ 	/* Enable RX */
++-	rswitch_modify(rdev->addr, GWTRC0, 0, BIT(rdev->rx_chain->index));
+++	if (!rswitch_is_front_dev(rdev))
+++		rswitch_modify(rdev->addr, GWTRC0, 0, BIT(rdev->rx_chain->index));
++ 
++ 	/* Enable interrupt */
++ 	pr_debug("%s: tx = %d, rx = %d\n", __func__, rdev->tx_chain->index, rdev->rx_chain->index);
++@@ -1997,7 +2009,9 @@ static int rswitch_open(struct net_device *ndev)
++ 		netif_carrier_on(ndev);
++ 	}
++ 
++-	rtsn_ptp_init(rdev->priv->ptp_priv, RTSN_PTP_REG_LAYOUT_S4, RTSN_PTP_CLOCK_S4);
+++	if (!rswitch_is_front_dev(rdev))
+++		rtsn_ptp_init(rdev->priv->ptp_priv, RTSN_PTP_REG_LAYOUT_S4,
+++			      RTSN_PTP_CLOCK_S4);
++ 
++ out:
++ 	return err;
++@@ -2078,7 +2092,7 @@ static int rswitch_start_xmit(struct sk_buff *skb, struct net_device *ndev)
++ 	desc->die_dt = DT_FSINGLE | DIE;
++ 
++ 	c->cur++;
++-	rswitch_modify(rdev->addr, GWTRC0, 0, BIT(c->index));
+++	rswitch_trigger_chain(rdev->priv, c);
++ 
++ out:
++ 	spin_unlock_irqrestore(&rdev->lock, flags);
++diff --git a/drivers/net/ethernet/renesas/rswitch.h b/drivers/net/ethernet/renesas/rswitch.h
++index 7e333caca5f2..435034c3d191 100644
++--- a/drivers/net/ethernet/renesas/rswitch.h
+++++ b/drivers/net/ethernet/renesas/rswitch.h
++@@ -184,6 +184,7 @@ struct rswitch_device {
++ 	int port;
++ 	struct rswitch_etha *etha;
++ 	int remote_chain;
+++	struct rswitch_vmq_front_info *front_info;
++ };
++ 
++ struct rswitch_private {
++@@ -225,6 +226,8 @@ void rswitch_rxdmac_free(struct net_device *ndev, struct rswitch_private *priv);
++ void rswitch_ndev_unregister(struct rswitch_private *priv, int index);
++ 
++ int rswitch_poll(struct napi_struct *napi, int budget);
+++int rswitch_tx_free(struct net_device *ndev, bool free_txed_only);
+++
++ void rswitch_gwca_chain_register(struct rswitch_private *priv,
++ 				 struct rswitch_gwca_chain *c, bool ts);
++ 
++@@ -234,7 +237,19 @@ void rswitch_enadis_rdev_irqs(struct rswitch_device *rdev, bool enable);
++ 
++ struct rswitch_private *rswitch_find_priv(void);
++ 
+++void rswitch_vmq_front_trigger_tx(struct rswitch_device* rdev);
+++void rswitch_vmq_front_rx_done(struct rswitch_device* rdev);
++ void rswitch_vmq_back_data_irq(struct rswitch_gwca_chain *c);
++ 
++ int rswitch_desc_alloc(struct rswitch_private *priv);
++ void rswitch_desc_free(struct rswitch_private *priv);
+++
+++static inline bool rswitch_is_front_dev(struct rswitch_device *rdev)
+++{
+++	return rdev->front_info != NULL;
+++}
+++
+++static inline bool rswitch_is_front_priv(struct rswitch_private *priv)
+++{
+++	return priv->addr == NULL;
+++}
++diff --git a/drivers/net/ethernet/renesas/rswitch_xenfront.c b/drivers/net/ethernet/renesas/rswitch_xenfront.c
++new file mode 100644
++index 000000000000..e44b6380a87d
++--- /dev/null
+++++ b/drivers/net/ethernet/renesas/rswitch_xenfront.c
++@@ -0,0 +1,497 @@
+++// SPDX-License-Identifier: GPL-2.0
+++/* Renesas Ethernet Switch Para-Virtualized driver
+++ *
+++ * Copyright (C) 2022 EPAM Systems
+++ */
+++
+++#include <linux/dma-mapping.h>
+++#include <linux/of_device.h>
+++#include <linux/etherdevice.h>
+++#include <linux/platform_device.h>
+++#include <xen/interface/grant_table.h>
+++#include <xen/grant_table.h>
+++#include <xen/xenbus.h>
+++#include <xen/page.h>
+++#include <xen/events.h>
+++#include "rswitch.h"
+++
+++static DECLARE_WAIT_QUEUE_HEAD(module_wq);
+++
+++struct rswitch_vmq_front_info {
+++	evtchn_port_t rx_evtchn;
+++	evtchn_port_t tx_evtchn;
+++	int rx_irq;
+++	int tx_irq;
+++	struct net_device *ndev;
+++	struct xenbus_device *xbdev;
+++};
+++
+++/* Global state to hold some data like LINKFIX table */
+++struct rswitch_private *rswitch_front_priv;
+++DEFINE_SPINLOCK(rswitch_front_priv_lock);
+++
+++static struct rswitch_private *get_priv(void)
+++{
+++	struct rswitch_private *ret = NULL;
+++
+++	spin_lock(&rswitch_front_priv_lock);
+++
+++	if (!rswitch_front_priv)
+++		goto out;
+++
+++	if (!get_device(&rswitch_front_priv->pdev->dev))
+++		goto out;
+++
+++	ret = rswitch_front_priv;
+++out:
+++	spin_unlock(&rswitch_front_priv_lock);
+++
+++	return ret;;
+++}
+++
+++static void put_priv(struct rswitch_private *priv)
+++{
+++	put_device(&priv->pdev->dev);
+++}
+++
+++static struct net_device*
+++		rswitch_vmq_front_ndev_allocate(struct xenbus_device *xbd)
+++{
+++	struct net_device *ndev;
+++	struct rswitch_device *rdev;
+++
+++	ndev = alloc_etherdev_mqs(sizeof(struct rswitch_device), 1, 1);
+++
+++	if (!ndev)
+++		return ERR_PTR(-ENOMEM);
+++
+++	SET_NETDEV_DEV(ndev, &xbd->dev);
+++
+++	ether_setup(ndev);
+++
+++	rdev = netdev_priv(ndev);
+++	rdev->front_info = devm_kzalloc(&xbd->dev,
+++					sizeof(struct rswitch_vmq_front_info),
+++					GFP_KERNEL);
+++	if (!rdev->front_info)
+++		goto out_free_netdev;
+++
+++	rdev->front_info->ndev = ndev;
+++	rdev->front_info->xbdev = xbd;
+++	rdev->ndev = ndev;
+++	rdev->priv = get_priv();
+++	rdev->port = 3;
+++	rdev->etha = NULL;
+++	rdev->remote_chain = -1;
+++	rdev->addr = NULL;
+++
+++	spin_lock_init(&rdev->lock);
+++
+++	ndev->features = NETIF_F_RXCSUM;
+++	ndev->hw_features = NETIF_F_RXCSUM;
+++	ndev->base_addr = (unsigned long)rdev->addr;
+++	ndev->netdev_ops = &rswitch_netdev_ops;
+++
+++	return ndev;
+++
+++out_free_netdev:
+++	free_netdev(ndev);
+++
+++	return ERR_PTR(-ENOMEM);
+++}
+++
+++static int rswitch_vmq_front_ndev_register(struct rswitch_device *rdev,
+++					   int index,
+++					   int tx_chain_num,
+++					   int rx_chain_num)
+++{
+++	struct net_device *ndev = rdev->ndev;
+++	int err;
+++
+++	snprintf(ndev->name, IFNAMSIZ, "vmq%d", index);
+++	netif_napi_add(ndev, &rdev->napi, rswitch_poll, 64);
+++
+++	eth_hw_addr_random(ndev);
+++
+++	/* Network device register */
+++	err = register_netdev(ndev);
+++	if (err)
+++		goto out_reg_netdev;
+++
+++	err = rswitch_rxdmac_init(ndev, rdev->priv, rx_chain_num);
+++	if (err < 0)
+++		goto out_rxdmac;
+++
+++	err = rswitch_txdmac_init(ndev, rdev->priv, tx_chain_num);
+++	if (err < 0)
+++		goto out_txdmac;
+++
+++	/* Print device information */
+++	netdev_info(ndev, "MAC address %pMn", ndev->dev_addr);
+++
+++	return 0;
+++
+++out_txdmac:
+++	rswitch_rxdmac_free(ndev, NULL);
+++
+++out_rxdmac:
+++	unregister_netdev(ndev);
+++
+++out_reg_netdev:
+++	netif_napi_del(&rdev->napi);
+++
+++	return err;
+++}
+++
+++static irqreturn_t rswitch_vmq_front_rx_interrupt(int irq, void *dev_id)
+++{
+++	struct rswitch_device *rdev = dev_id;
+++
+++	napi_schedule(&rdev->napi);
+++
+++	return IRQ_HANDLED;
+++}
+++
+++static irqreturn_t rswitch_vmq_front_tx_interrupt(int irq, void *dev_id)
+++{
+++	struct rswitch_device *rdev = dev_id;
+++
+++	napi_schedule(&rdev->napi);
+++
+++	/* TODO: This is better, but there is a possibility for locking issues */
+++	/* rswitch_tx_free(rdev->ndev, true); */
+++
+++	return IRQ_HANDLED;
+++}
+++
+++void rswitch_vmq_front_trigger_tx(struct rswitch_device* rdev)
+++{
+++	struct rswitch_vmq_front_info *np = rdev->front_info;
+++
+++	notify_remote_via_evtchn(np->tx_evtchn);
+++}
+++
+++void rswitch_vmq_front_rx_done(struct rswitch_device* rdev)
+++{
+++	struct rswitch_vmq_front_info *np = rdev->front_info;
+++
+++	notify_remote_via_evtchn(np->rx_evtchn);
+++}
+++
+++static int rswitch_vmq_front_connect(struct net_device *dev)
+++{
+++	struct rswitch_device *rdev = netdev_priv(dev);
+++	struct rswitch_vmq_front_info *np = rdev->front_info;
+++	unsigned int tx_chain_id, rx_chain_id, index;
+++	unsigned int remote_chain_id;
+++	int err;
+++
+++	tx_chain_id = xenbus_read_unsigned(np->xbdev->otherend,
+++					   "tx-chain-id", 0);
+++	rx_chain_id = xenbus_read_unsigned(np->xbdev->otherend,
+++					   "rx-chain-id", 0);
+++	remote_chain_id = xenbus_read_unsigned(np->xbdev->otherend,
+++					   "remote-chain-id", 0);
+++	index = xenbus_read_unsigned(np->xbdev->nodename, "if-num", ~0U);
+++
+++	if (!tx_chain_id || !rx_chain_id) {
+++		dev_info(&np->xbdev->dev, "backend did not supplied chain id\n");
+++		return -ENODEV;
+++	}
+++
+++	err = rswitch_vmq_front_ndev_register(rdev, index, tx_chain_id, rx_chain_id);
+++	if (err)
+++		return err;
+++
+++	/* TODO: Add error handling */
+++	err = xenbus_alloc_evtchn(np->xbdev, &np->rx_evtchn);
+++	if (err) {
+++		xenbus_dev_fatal(np->xbdev, err,
+++				 "Failed to allocate RX event channel: %d\n", err);
+++		return err;
+++	}
+++
+++	err = xenbus_alloc_evtchn(np->xbdev, &np->tx_evtchn);
+++	if (err) {
+++		xenbus_dev_fatal(np->xbdev, err,
+++				 "Failed to allocate TX event channel: %d\n", err);
+++		return err;
+++	}
+++
+++	err = bind_evtchn_to_irqhandler(np->rx_evtchn,
+++					rswitch_vmq_front_rx_interrupt,
+++					0, rdev->ndev->name, rdev);
+++	if (err < 0) {
+++		xenbus_dev_fatal(np->xbdev, err,
+++				 "Failed to bind RX event channel: %d\n", err);
+++		return err;
+++	}
+++	np->rx_irq = err;
+++
+++	err = bind_evtchn_to_irqhandler(np->tx_evtchn,
+++					rswitch_vmq_front_tx_interrupt,
+++					0, rdev->ndev->name, rdev);
+++	if (err < 0) {
+++		xenbus_dev_fatal(np->xbdev, err,
+++				 "Failed to bind TX event channel: %d\n", err);
+++		return err;
+++	}
+++	np->tx_irq = err;
+++
+++	rdev->remote_chain = remote_chain_id;
+++
+++	err = xenbus_printf(XBT_NIL, np->xbdev->nodename, "rx-evtch", "%u", np->rx_evtchn);
+++	if (err) {
+++		xenbus_dev_fatal(np->xbdev, err,
+++				 "Failed to write RX event channel id: %d\n", err);
+++		return err;
+++	}
+++
+++	err = xenbus_printf(XBT_NIL, np->xbdev->nodename, "tx-evtch", "%u", np->tx_evtchn);
+++	if (err) {
+++		xenbus_dev_fatal(np->xbdev, err,
+++				 "Failed to write TX event channel id: %d\n", err);
+++		return err;
+++	}
+++
+++	return 0;
+++}
+++
+++static int rswitch_vmq_front_probe(struct xenbus_device *dev,
+++				   const struct xenbus_device_id *id)
+++{
+++	int err;
+++	struct net_device *netdev;
+++	struct rswitch_private *priv;
+++
+++	priv = get_priv();
+++	if (!priv)
+++		return -EPROBE_DEFER;
+++
+++	netdev = rswitch_vmq_front_ndev_allocate(dev);
+++	put_priv(priv);
+++
+++	if (IS_ERR(netdev)) {
+++		err = PTR_ERR(netdev);
+++		xenbus_dev_fatal(dev, err, "creating netdev");
+++		return err;
+++	}
+++
+++	dev_set_drvdata(&dev->dev, netdev_priv(netdev));
+++	err = dma_coerce_mask_and_coherent(&dev->dev, DMA_BIT_MASK(40));
+++
+++	do {
+++		xenbus_switch_state(dev, XenbusStateInitialising);
+++		err = wait_event_timeout(module_wq,
+++				 xenbus_read_driver_state(dev->otherend) !=
+++				 XenbusStateClosed &&
+++				 xenbus_read_driver_state(dev->otherend) !=
+++				 XenbusStateUnknown, 5 * HZ);
+++	} while (!err);
+++
+++	return 0;
+++}
+++
+++static void xenbus_close(struct xenbus_device *dev)
+++{
+++	int ret;
+++
+++	if (xenbus_read_driver_state(dev->otherend) == XenbusStateClosed)
+++		return;
+++	do {
+++		xenbus_switch_state(dev, XenbusStateClosing);
+++		ret = wait_event_timeout(module_wq,
+++				   xenbus_read_driver_state(dev->otherend) ==
+++				   XenbusStateClosing ||
+++				   xenbus_read_driver_state(dev->otherend) ==
+++				   XenbusStateClosed ||
+++				   xenbus_read_driver_state(dev->otherend) ==
+++				   XenbusStateUnknown,
+++				   5 * HZ);
+++	} while (!ret);
+++
+++	if (xenbus_read_driver_state(dev->otherend) == XenbusStateClosed)
+++		return;
+++
+++	do {
+++		xenbus_switch_state(dev, XenbusStateClosed);
+++		ret = wait_event_timeout(module_wq,
+++				   xenbus_read_driver_state(dev->otherend) ==
+++				   XenbusStateClosed ||
+++				   xenbus_read_driver_state(dev->otherend) ==
+++				   XenbusStateUnknown,
+++				   5 * HZ);
+++	} while (!ret);
+++}
+++
+++static void rswitch_vmq_front_disconnect_backend(struct rswitch_vmq_front_info *info)
+++{
+++	if (info->rx_irq)
+++		unbind_from_irqhandler(info->rx_irq, dev_get_drvdata(&info->xbdev->dev));
+++	if (info->tx_irq)
+++		unbind_from_irqhandler(info->tx_irq, dev_get_drvdata(&info->xbdev->dev));
+++	if (info->rx_evtchn)
+++		xenbus_free_evtchn(info->xbdev, info->rx_evtchn);
+++	if (info->tx_evtchn)
+++		xenbus_free_evtchn(info->xbdev, info->tx_evtchn);
+++
+++	info->rx_irq = 0;
+++	info->tx_irq = 0;
+++	info->rx_evtchn = 0;
+++	info->tx_evtchn = 0;
+++}
+++
+++static int rswitch_vmq_front_remove(struct xenbus_device *dev)
+++{
+++	struct rswitch_device *rdev = dev_get_drvdata(&dev->dev);
+++	struct rswitch_vmq_front_info *np = rdev->front_info;
+++
+++	xenbus_close(dev);
+++	rswitch_vmq_front_disconnect_backend(np);
+++
+++
+++	rswitch_txdmac_free(np->ndev, rdev->priv);
+++	rswitch_rxdmac_free(np->ndev, rdev->priv);
+++
+++	unregister_netdev(np->ndev);
+++	netif_napi_del(&rdev->napi);
+++	free_netdev(np->ndev);
+++
+++	return 0;
+++}
+++
+++static void rswitch_vmq_front_changed(struct xenbus_device *dev,
+++			    enum xenbus_state backend_state)
+++{
+++	struct rswitch_device *priv = dev_get_drvdata(&dev->dev);
+++	struct net_device *netdev = priv->ndev;
+++
+++	wake_up_all(&module_wq);
+++
+++	switch (backend_state) {
+++	case XenbusStateInitialising:
+++	case XenbusStateInitialised:
+++	case XenbusStateReconfiguring:
+++	case XenbusStateReconfigured:
+++	case XenbusStateUnknown:
+++		break;
+++
+++	case XenbusStateInitWait:
+++		if (dev->state != XenbusStateInitialising)
+++			break;
+++		if (rswitch_vmq_front_connect(netdev) != 0)
+++			break;
+++		xenbus_switch_state(dev, XenbusStateConnected);
+++		break;
+++
+++	case XenbusStateConnected:
+++		break;
+++
+++	case XenbusStateClosed:
+++		if (dev->state == XenbusStateClosed)
+++			break;
+++		fallthrough;	/* Missed the backend's CLOSING state */
+++	case XenbusStateClosing:
+++		xenbus_frontend_closed(dev);
+++		break;
+++	}
+++}
+++
+++static const struct xenbus_device_id rswitch_vmq_front_ids[] = {
+++	{ "renesas_vmq" },
+++	{ "" }
+++};
+++
+++static struct xenbus_driver rswitch_vmq_front_driver = {
+++	.ids = rswitch_vmq_front_ids,
+++	.probe = rswitch_vmq_front_probe,
+++	.remove = rswitch_vmq_front_remove,
+++	.otherend_changed = rswitch_vmq_front_changed,
+++};
+++
+++static const struct of_device_id renesas_vmq_of_table[] = {
+++	{ .compatible = "renesas,etherswitch-xen", },
+++	{ }
+++};
+++
+++MODULE_DEVICE_TABLE(of, renesas_vmq_of_table);
+++
+++static int renesas_vmq_of_dev_probe(struct platform_device *pdev)
+++{
+++	struct rswitch_private *priv;
+++	int err;
+++
+++	dev_info(&pdev->dev, "Initializing virtual R-Switch front-end device\n");
+++
+++	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
+++	if (!priv)
+++		return -ENOMEM;
+++
+++	priv->pdev = pdev;
+++	priv->gwca.num_chains = 32;
+++
+++	err = rswitch_desc_alloc(priv);
+++	if (err < 0)
+++		return -ENOMEM;
+++
+++	platform_set_drvdata(pdev, priv);
+++
+++	spin_lock(&rswitch_front_priv_lock);
+++	if (rswitch_front_priv)
+++		WARN(true, "rswitch_front_priv is already set\n");
+++	else
+++		rswitch_front_priv = priv;
+++	spin_unlock(&rswitch_front_priv_lock);
+++
+++	return 0;
+++}
+++
+++static int renesas_vmq_of_dev_remove(struct platform_device *pdev)
+++{
+++	struct rswitch_private *priv;
+++
+++	dev_info(&pdev->dev, "Removing virtual R-Switch front-end device\n");
+++
+++	priv = platform_get_drvdata(pdev);
+++	rswitch_desc_free(priv);
+++
+++	platform_set_drvdata(pdev, NULL);
+++
+++	spin_lock(&rswitch_front_priv_lock);
+++	if (rswitch_front_priv == priv)
+++		rswitch_front_priv = NULL;
+++	spin_unlock(&rswitch_front_priv_lock);
+++
+++	return 0;
+++}
+++
+++static struct platform_driver renesas_vmq_of_dev = {
+++	.probe = renesas_vmq_of_dev_probe,
+++	.remove = renesas_vmq_of_dev_remove,
+++	.driver = {
+++		.name = "renesas_vmq",
+++		.of_match_table = renesas_vmq_of_table,
+++	}
+++};
+++
+++static int __init rswitch_vmq_front_init(void)
+++{
+++	if (!xen_domain())
+++		return -ENODEV;
+++
+++	platform_driver_register(&renesas_vmq_of_dev);
+++
+++	return xenbus_register_frontend(&rswitch_vmq_front_driver);
+++}
+++module_init(rswitch_vmq_front_init);
+++
+++
+++static void __exit rswitch_vmq_front_exit(void)
+++{
+++	xenbus_unregister_driver(&rswitch_vmq_front_driver);
+++	platform_driver_unregister(&renesas_vmq_of_dev);
+++}
+++module_exit(rswitch_vmq_front_exit);
+++
+++MODULE_DESCRIPTION("Renesas R-Switch PV driver front-end");
+++MODULE_LICENSE("GPL");
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0013-rswitch-xenback-fix-event-channel-usage.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0013-rswitch-xenback-fix-event-channel-usage.patch
+new file mode 100755
+index 0000000..43c09e4
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0013-rswitch-xenback-fix-event-channel-usage.patch
+@@ -0,0 +1,35 @@
++From df67b606beeacf557e02a5d2d451687af3aa113c Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Wed, 1 Jun 2022 12:57:09 +0300
++Subject: [PATCH 13/20] rswitch: xenback: fix event channel usage
++
++Use notify_remote_via_irq() instead of notify_remote_via_evtchn(), because
++notify_remote_via_evtchn() expects id of local channel, not remote one. On other
++hand, be->*_evtchn holds ids of remote channels.
++
++We don't know numbers of local event channels, but we do know their IRQ numbers,
++so it is correct to use notify_remote_via_irq().
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ drivers/net/ethernet/renesas/rswitch_xenback.c | 4 ++--
++ 1 file changed, 2 insertions(+), 2 deletions(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch_xenback.c b/drivers/net/ethernet/renesas/rswitch_xenback.c
++index e99fb2d898e2..2e07dca47c49 100644
++--- a/drivers/net/ethernet/renesas/rswitch_xenback.c
+++++ b/drivers/net/ethernet/renesas/rswitch_xenback.c
++@@ -244,8 +244,8 @@ void rswitch_vmq_back_data_irq(struct rswitch_gwca_chain *c)
++ {
++ 	struct rswitch_vmq_back_info *be = c->back_info;
++ 
++-	notify_remote_via_evtchn(be->rx_evtchn);
++-	notify_remote_via_evtchn(be->tx_evtchn);
+++	notify_remote_via_irq(be->rx_irq);
+++	notify_remote_via_irq(be->tx_irq);
++ }
++ 
++ static irqreturn_t rswitch_vmq_back_rx_interrupt(int irq, void *dev_id)
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0014-rswitch-use-parent-device-for-devm-allocations.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0014-rswitch-use-parent-device-for-devm-allocations.patch
+new file mode 100755
+index 0000000..2e6f6d6
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0014-rswitch-use-parent-device-for-devm-allocations.patch
+@@ -0,0 +1,44 @@
++From cdbc223bec23611b9be09bfe94b1efd504775ca0 Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Thu, 23 Jun 2022 21:35:43 +0300
++Subject: [PATCH 14/20] rswitch: use parent device for devm allocations
++
++This change is needed because we are going to rework device
++initialization order in xenback and xenfront. We will allocate chains
++before registering ndev. As at this point ndev->dev is not
++initialized, we can't use it for resource mananger (devm) operations.
++
++But we can use parent device which is already initialized. This is
++perfectly fine, as parent device is a xen pv driver instance, which
++will have (almost) the same lifetime as our ndev.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c | 4 ++--
++ 1 file changed, 2 insertions(+), 2 deletions(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index d1c0f5835614..b8eb31d1e550 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -2611,7 +2611,7 @@ int rswitch_txdmac_init(struct net_device *ndev, struct rswitch_private *priv,
++ 	}
++ 	else
++ 	{
++-		rdev->tx_chain = devm_kzalloc(&ndev->dev, sizeof(*rdev->rx_chain),
+++		rdev->tx_chain = devm_kzalloc(ndev->dev.parent, sizeof(*rdev->rx_chain),
++ 					      GFP_KERNEL);
++ 		if (!rdev->tx_chain)
++ 			return -ENOMEM;
++@@ -2662,7 +2662,7 @@ int rswitch_rxdmac_init(struct net_device *ndev, struct rswitch_private *priv,
++ 	}
++ 	else
++ 	{
++-		rdev->rx_chain = devm_kzalloc(&ndev->dev, sizeof(*rdev->rx_chain),
+++		rdev->rx_chain = devm_kzalloc(ndev->dev.parent, sizeof(*rdev->rx_chain),
++ 					      GFP_KERNEL);
++ 		if (!rdev->rx_chain)
++ 			return -ENOMEM;
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0015-rswitch-rework-port-based-forwarding.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0015-rswitch-rework-port-based-forwarding.patch
+new file mode 100755
+index 0000000..f5ecf18
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0015-rswitch-rework-port-based-forwarding.patch
+@@ -0,0 +1,120 @@
++From 43c3732743d03b0c990c1efe9260a78817ee8f59 Mon Sep 17 00:00:00 2001
++From: Dung Nguyen <dung.nguyen.zy@renesas.com>
++Date: Tue, 20 Dec 2022 13:52:15 +0700
++Subject: [PATCH 15/20] rswitch: rework port-based forwarding
++
++1. Always use direct descriptors when sending to TSNx. This is to
++minimize traffic flow. Prior to this change, every outgoing packet was
++forwarded to all TSNx interfaces. Now it will be sent only to designated
++one.
++
++2. Implement rswitch_mfwd_set_port_based() function that will configure
++port based forwarding for a given port. Export it, as it will be used by
++xenback driver.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Signed-off-by: Dung Nguyen <dung.nguyen.zy@renesas.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c        | 24 ++++++++++---------
++ drivers/net/ethernet/renesas/rswitch.h        |  5 +++-
++ .../net/ethernet/renesas/rswitch_xenfront.c   |  2 +-
++ 3 files changed, 18 insertions(+), 13 deletions(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index b8eb31d1e550..8bd1e37943b6 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -2081,10 +2081,7 @@ static int rswitch_start_xmit(struct sk_buff *skb, struct net_device *ndev)
++ 		desc->info1 = (rdev->ts_tag << 8) | BIT(3);
++ 	}
++ 
++-	/* Use direct descriptor if we know remote chain number */
++-	/* HACK: GWCA0 Port number (8) is hardcoded */
++-	if (rdev->remote_chain >= 0)
++-		desc->info1 |= ((u64)rdev->remote_chain << 32) | (8UL << 48) |  BIT(2);
+++	desc->info1 |= ((u64)rdev->remote_chain << 32) | ((BIT(rdev->port)) << 48) |  BIT(2);
++ 
++ 	skb_tx_timestamp(skb);
++ 	dma_wmb();
++@@ -2752,7 +2749,7 @@ static int rswitch_ndev_create(struct rswitch_private *priv, int index)
++ 		rdev->port = -1;
++ 		rdev->etha = NULL;
++ 	}
++-	rdev->remote_chain = -1;
+++	rdev->remote_chain = 0;
++ 	rdev->addr = priv->addr;
++ 
++ 	spin_lock_init(&rdev->lock);
++@@ -2900,10 +2897,18 @@ static int rswitch_free_irqs(struct rswitch_private *priv)
++ 	return 0;
++ }
++ 
+++void rswitch_mfwd_set_port_based(struct rswitch_private *priv, u8 port,
+++				 struct rswitch_gwca_chain *rx_chain)
+++{
+++	int gwca_hw_idx = RSWITCH_HW_NUM_TO_GWCA_IDX(priv->gwca.index);
+++
+++	rs_write32(rx_chain->index, priv->addr + FWPBFCSDC(gwca_hw_idx, port));
+++	rs_write32(BIT(priv->gwca.index), priv->addr + FWPBFC(port));
+++}
+++
++ static void rswitch_fwd_init(struct rswitch_private *priv)
++ {
++ 	int i;
++-	int gwca_hw_idx = RSWITCH_HW_NUM_TO_GWCA_IDX(priv->gwca.index);
++ 
++ 	for (i = 0; i < RSWITCH_NUM_HW; i++) {
++ 		rs_write32(FWPC0_DEFAULT, priv->addr + FWPC00 + (i * 0x10));
++@@ -2914,11 +2919,8 @@ static void rswitch_fwd_init(struct rswitch_private *priv)
++ 	 * ETHA0 = forward to GWCA0, GWCA0 = forward to ETHA0,...
++ 	 * Currently, always forward to GWCA1.
++ 	 */
++-	for (i = 0; i < num_etha_ports; i++) {
++-		rs_write32(priv->rdev[i]->rx_chain->index, priv->addr + FWPBFCSDC(gwca_hw_idx, i));
++-		rs_write32(BIT(priv->gwca.index), priv->addr + FWPBFC(i));
++-	}
++-	rs_write32(GENMASK(num_etha_ports - 1, 0), priv->addr + FWPBFC(priv->gwca.index));
+++	for (i = 0; i < num_ndev; i++)
+++		rswitch_mfwd_set_port_based(priv, i, priv->rdev[i]->rx_chain);
++ 
++ 	/* Enable Direct Descriptors for GWCA1 */
++ 	rs_write32(FWPC1_DDE, priv->addr + FWPC10 + (priv->gwca.index * 0x10));
++diff --git a/drivers/net/ethernet/renesas/rswitch.h b/drivers/net/ethernet/renesas/rswitch.h
++index 435034c3d191..ca3675a2feaf 100644
++--- a/drivers/net/ethernet/renesas/rswitch.h
+++++ b/drivers/net/ethernet/renesas/rswitch.h
++@@ -183,7 +183,7 @@ struct rswitch_device {
++ 
++ 	int port;
++ 	struct rswitch_etha *etha;
++-	int remote_chain;
+++	u8 remote_chain;
++ 	struct rswitch_vmq_front_info *front_info;
++ };
++ 
++@@ -244,6 +244,9 @@ void rswitch_vmq_back_data_irq(struct rswitch_gwca_chain *c);
++ int rswitch_desc_alloc(struct rswitch_private *priv);
++ void rswitch_desc_free(struct rswitch_private *priv);
++ 
+++void rswitch_mfwd_set_port_based(struct rswitch_private *priv, u8 port,
+++				 struct rswitch_gwca_chain *rx_chain);
+++
++ static inline bool rswitch_is_front_dev(struct rswitch_device *rdev)
++ {
++ 	return rdev->front_info != NULL;
++diff --git a/drivers/net/ethernet/renesas/rswitch_xenfront.c b/drivers/net/ethernet/renesas/rswitch_xenfront.c
++index e44b6380a87d..f45ea3a8f69f 100644
++--- a/drivers/net/ethernet/renesas/rswitch_xenfront.c
+++++ b/drivers/net/ethernet/renesas/rswitch_xenfront.c
++@@ -82,7 +82,7 @@ static struct net_device*
++ 	rdev->priv = get_priv();
++ 	rdev->port = 3;
++ 	rdev->etha = NULL;
++-	rdev->remote_chain = -1;
+++	rdev->remote_chain = 0;
++ 	rdev->addr = NULL;
++ 
++ 	spin_lock_init(&rdev->lock);
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0016-rswitch_xenback-enable-correct-IRQs.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0016-rswitch_xenback-enable-correct-IRQs.patch
+new file mode 100755
+index 0000000..9584214
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0016-rswitch_xenback-enable-correct-IRQs.patch
+@@ -0,0 +1,59 @@
++From 3a46ba75a886d51012a57b7964b833bd16baab51 Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Thu, 23 Jun 2022 21:43:46 +0300
++Subject: [PATCH 16/20] rswitch_xenback: enable correct IRQs
++
++Prior to this fix, xenback enabled IRQs for a local vmq interface, while in fact
++it needs to enable the for a remote one.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c         | 2 +-
++ drivers/net/ethernet/renesas/rswitch.h         | 3 +++
++ drivers/net/ethernet/renesas/rswitch_xenback.c | 3 ++-
++ 3 files changed, 6 insertions(+), 2 deletions(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index 8bd1e37943b6..c112980973d0 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -959,7 +959,7 @@ static void rswitch_get_data_irq_status(struct rswitch_private *priv, u32 *dis)
++ 		dis[i] = rs_read32(priv->addr + GWDIS0 + i * 0x10);
++ }
++ 
++-static void rswitch_enadis_data_irq(struct rswitch_private *priv, int index, bool enable)
+++void rswitch_enadis_data_irq(struct rswitch_private *priv, int index, bool enable)
++ {
++ 	u32 offs = (enable ? GWDIE0 : GWDID0) + (index / 32) * 0x10;
++ 	u32 tmp = 0;
++diff --git a/drivers/net/ethernet/renesas/rswitch.h b/drivers/net/ethernet/renesas/rswitch.h
++index ca3675a2feaf..1c09b8f66cec 100644
++--- a/drivers/net/ethernet/renesas/rswitch.h
+++++ b/drivers/net/ethernet/renesas/rswitch.h
++@@ -247,6 +247,9 @@ void rswitch_desc_free(struct rswitch_private *priv);
++ void rswitch_mfwd_set_port_based(struct rswitch_private *priv, u8 port,
++ 				 struct rswitch_gwca_chain *rx_chain);
++ 
+++void rswitch_enadis_data_irq(struct rswitch_private *priv, int index,
+++			     bool enable);
+++
++ static inline bool rswitch_is_front_dev(struct rswitch_device *rdev)
++ {
++ 	return rdev->front_info != NULL;
++diff --git a/drivers/net/ethernet/renesas/rswitch_xenback.c b/drivers/net/ethernet/renesas/rswitch_xenback.c
++index 2e07dca47c49..4a225c486ea3 100644
++--- a/drivers/net/ethernet/renesas/rswitch_xenback.c
+++++ b/drivers/net/ethernet/renesas/rswitch_xenback.c
++@@ -252,7 +252,8 @@ static irqreturn_t rswitch_vmq_back_rx_interrupt(int irq, void *dev_id)
++ {
++ 	struct rswitch_vmq_back_info *be = dev_id;
++ 
++-	rswitch_enadis_rdev_irqs(be->rdev, true);
+++	rswitch_enadis_data_irq(be->rswitch_priv, be->rx_chain->index, true);
+++	rswitch_enadis_data_irq(be->rswitch_priv, be->tx_chain->index, true);
++ 
++ 	xen_irq_lateeoi(irq, 0);
++ 
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0017-rswitch-vmq-add-support-for-TSNx-interfaces.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0017-rswitch-vmq-add-support-for-TSNx-interfaces.patch
+new file mode 100755
+index 0000000..c7fdd73
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0017-rswitch-vmq-add-support-for-TSNx-interfaces.patch
+@@ -0,0 +1,301 @@
++From bebd79e72a8ffcc7aee2d14548697defeb97c406 Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Thu, 23 Jun 2022 21:47:36 +0300
++Subject: [PATCH 17/20] rswitch: vmq: add support for TSNx interfaces
++
++Support "type" option that provides interface type.
++
++"tsn" type allows us to pass one of physical interfaces to other domain. In
++this case we:
++
++1. Don't need to create local vmq interface
++2. Need to configure port forwarding in a such way, so it will
++   pass all packets from given TSN to a newly allocated chain
++   for a front-end
++3. Need to provide TSNx MAC address to a front-end
++4. Need to set TSNx interface in backend to dormant state, so
++   system will not try to use it
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ .../net/ethernet/renesas/rswitch_xenback.c    | 91 +++++++++++++++----
++ .../net/ethernet/renesas/rswitch_xenfront.c   | 60 +++++++++---
++ 2 files changed, 120 insertions(+), 31 deletions(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch_xenback.c b/drivers/net/ethernet/renesas/rswitch_xenback.c
++index 4a225c486ea3..3ba955c73108 100644
++--- a/drivers/net/ethernet/renesas/rswitch_xenback.c
+++++ b/drivers/net/ethernet/renesas/rswitch_xenback.c
++@@ -17,6 +17,11 @@
++ /* TODO: get this from rswitch.c */
++ #define RSWITCH_BACK_BASE_INDEX		3
++ 
+++enum rswtich_pv_type {
+++	RSWITCH_PV_VMQ,
+++	RSWITCH_PV_TSN,
+++};
+++
++ struct rswitch_vmq_back_info {
++ 	char name[32];
++ 	struct xenbus_device *dev;
++@@ -37,6 +42,7 @@ struct rswitch_vmq_back_info {
++ 
++ 	uint32_t osid;
++ 	uint32_t if_num;
+++	enum rswtich_pv_type type;
++ };
++ 
++ static struct rswitch_device*
++@@ -77,10 +83,6 @@ rswitch_vmq_back_ndev_register(struct rswitch_private *priv, int index)
++ 	eth_hw_addr_random(ndev);
++ 
++ 	/* Network device register */
++-	err = register_netdev(ndev);
++-	if (err)
++-		goto out_reg_netdev;
++-
++ 	err = rswitch_rxdmac_init(ndev, priv, -1);
++ 	if (err < 0)
++ 		goto out_rxdmac;
++@@ -98,9 +100,6 @@ rswitch_vmq_back_ndev_register(struct rswitch_private *priv, int index)
++ 	rswitch_rxdmac_free(ndev, priv);
++ 
++ out_rxdmac:
++-	unregister_netdev(ndev);
++-
++-out_reg_netdev:
++ 	netif_napi_del(&rdev->napi);
++ 	free_netdev(ndev);
++ 
++@@ -135,6 +134,13 @@ static int rswitch_vmq_back_remove(struct xenbus_device *dev)
++ 	if (be->tx_chain)
++ 		rswitch_gwca_put(be->rswitch_priv, be->tx_chain);
++ 
+++	if (be->type == RSWITCH_PV_TSN) {
+++		struct rswitch_device *rdev = be->rswitch_priv->rdev[be->if_num];
+++		rswitch_mfwd_set_port_based(be->rswitch_priv, be->if_num,
+++					    rdev->rx_chain);
+++		netif_dormant_off(rdev->ndev);
+++	}
+++
++ 	kfree(be);
++ 
++ 	dev_set_drvdata(&dev->dev, NULL);
++@@ -151,6 +157,7 @@ static int rswitch_vmq_back_probe(struct xenbus_device *dev,
++ {
++ 	int err = 0;
++ 	struct xenbus_transaction xbt;
+++	char *type_str;
++ 
++ 	struct rswitch_vmq_back_info *be = kzalloc(sizeof(*be), GFP_KERNEL);
++ 
++@@ -189,13 +196,40 @@ static int rswitch_vmq_back_probe(struct xenbus_device *dev,
++ 
++ 	be->if_num = xenbus_read_unsigned(dev->otherend, "if-num", 255);
++ 
++-	be->rdev = rswitch_vmq_back_ndev_register(be->rswitch_priv, be->if_num);
++-	if (IS_ERR(be->rdev))
++-	{
++-		err = PTR_ERR(be->rdev);
++-		xenbus_dev_fatal(dev, err, "Failed to allocate local rdev: %d ", err);
++-		return err;
+++	type_str = xenbus_read(XBT_NIL, dev->otherend, "type", NULL);
+++	if (strcmp(type_str, "vmq") == 0) {
+++		be->type = RSWITCH_PV_VMQ;
+++
+++		be->rdev = rswitch_vmq_back_ndev_register(be->rswitch_priv, be->if_num);
+++
+++		if (IS_ERR(be->rdev))
+++		{
+++			err = PTR_ERR(be->rdev);
+++			xenbus_dev_fatal(dev, err,
+++					 "Failed to allocate local rdev: %d ",
+++					 err);
+++			kfree(type_str);
+++			return err;
+++		}
+++	}
+++	else if (strcmp(type_str, "tsn") == 0) {
+++		struct rswitch_device *rdev = be->rswitch_priv->rdev[be->if_num];
+++
+++		if (be->if_num > RSWITCH_MAX_NUM_ETHA) {
+++			xenbus_dev_fatal(dev, err, "Invalid device tsn%d ", be->if_num);
+++			kfree(type_str);
+++			return -ENODEV;
+++		}
+++
+++		be->type = RSWITCH_PV_TSN;
+++		netif_dormant_on(rdev->ndev);
+++		rswitch_mfwd_set_port_based(be->rswitch_priv, be->if_num, be->rx_chain);
+++	} else {
+++		xenbus_dev_fatal(dev, err, "Unknown device type: %s ", type_str);
+++		kfree(type_str);
+++		return -ENODEV;
++ 	}
+++	kfree(type_str);
++ 
++ 	do {
++ 		err = xenbus_transaction_start(&xbt);
++@@ -211,10 +245,23 @@ static int rswitch_vmq_back_probe(struct xenbus_device *dev,
++ 		if (err)
++ 			goto abort_transaction;
++ 
++-		err = xenbus_printf(xbt, dev->nodename, "remote-chain-id", "%d",
++-				    be->rdev->rx_chain->index);
++-		if (err)
++-			goto abort_transaction;
+++		switch (be->type) {
+++		case RSWITCH_PV_VMQ:
+++			err = xenbus_printf(xbt, dev->nodename,
+++					    "remote-chain-id", "%d",
+++					    be->rdev->rx_chain->index);
+++			if (err)
+++				goto abort_transaction;
+++			break;
+++		case RSWITCH_PV_TSN: {
+++			struct rswitch_device *rdev = be->rswitch_priv->rdev[be->if_num];
+++
+++			err = xenbus_printf(xbt, dev->nodename,
+++					    "mac", "%pMn",
+++					    rdev->ndev->dev_addr);
+++			break;
+++		}
+++		}
++ 
++ 		err = xenbus_transaction_end(xbt, 0);
++ 	} while (err == -EAGAIN);
++@@ -318,9 +365,15 @@ static int rswitch_vmq_back_connect(struct xenbus_device *dev)
++ 	notify_remote_via_evtchn(tx_evt);
++ 	notify_remote_via_evtchn(rx_evt);
++ 
++-	be->rdev->remote_chain = be->rx_chain->index;
+++	if (be->type == RSWITCH_PV_VMQ)
+++	{
+++		be->rdev->remote_chain = be->rx_chain->index;
+++		err = register_netdev(be->rdev->ndev);
+++	}
+++	else
+++		err = 0;
++ 
++-	return 0;
+++	return err;
++ }
++ 
++ static void set_backend_state(struct xenbus_device *dev,
++diff --git a/drivers/net/ethernet/renesas/rswitch_xenfront.c b/drivers/net/ethernet/renesas/rswitch_xenfront.c
++index f45ea3a8f69f..c01d6cd5f694 100644
++--- a/drivers/net/ethernet/renesas/rswitch_xenfront.c
+++++ b/drivers/net/ethernet/renesas/rswitch_xenfront.c
++@@ -101,22 +101,26 @@ static struct net_device*
++ }
++ 
++ static int rswitch_vmq_front_ndev_register(struct rswitch_device *rdev,
+++					   const char *type,
++ 					   int index,
++ 					   int tx_chain_num,
++-					   int rx_chain_num)
+++					   int rx_chain_num,
+++					   u8* mac)
++ {
++ 	struct net_device *ndev = rdev->ndev;
++ 	int err;
++ 
++-	snprintf(ndev->name, IFNAMSIZ, "vmq%d", index);
++-	netif_napi_add(ndev, &rdev->napi, rswitch_poll, 64);
+++	snprintf(ndev->name, IFNAMSIZ, "%s%d", type, index);
++ 
++-	eth_hw_addr_random(ndev);
+++	if (strcmp(type, "tsn") == 0)
+++		rdev->port = index;
++ 
++-	/* Network device register */
++-	err = register_netdev(ndev);
++-	if (err)
++-		goto out_reg_netdev;
+++	netif_napi_add(ndev, &rdev->napi, rswitch_poll, 64);
+++
+++	if (!mac)
+++		eth_hw_addr_random(ndev);
+++	else
+++		ether_addr_copy(ndev->dev_addr, mac);
++ 
++ 	err = rswitch_rxdmac_init(ndev, rdev->priv, rx_chain_num);
++ 	if (err < 0)
++@@ -126,18 +130,23 @@ static int rswitch_vmq_front_ndev_register(struct rswitch_device *rdev,
++ 	if (err < 0)
++ 		goto out_txdmac;
++ 
+++	/* Network device register */
+++	err = register_netdev(ndev);
+++	if (err)
+++		goto out_reg_netdev;
+++
++ 	/* Print device information */
++ 	netdev_info(ndev, "MAC address %pMn", ndev->dev_addr);
++ 
++ 	return 0;
++ 
+++out_reg_netdev:
+++	rswitch_txdmac_free(ndev, NULL);
+++
++ out_txdmac:
++ 	rswitch_rxdmac_free(ndev, NULL);
++ 
++ out_rxdmac:
++-	unregister_netdev(ndev);
++-
++-out_reg_netdev:
++ 	netif_napi_del(&rdev->napi);
++ 
++ 	return err;
++@@ -185,6 +194,9 @@ static int rswitch_vmq_front_connect(struct net_device *dev)
++ 	unsigned int tx_chain_id, rx_chain_id, index;
++ 	unsigned int remote_chain_id;
++ 	int err;
+++	char *type;
+++	char *mac_str;
+++	u8 mac[ETH_ALEN];
++ 
++ 	tx_chain_id = xenbus_read_unsigned(np->xbdev->otherend,
++ 					   "tx-chain-id", 0);
++@@ -194,12 +206,36 @@ static int rswitch_vmq_front_connect(struct net_device *dev)
++ 					   "remote-chain-id", 0);
++ 	index = xenbus_read_unsigned(np->xbdev->nodename, "if-num", ~0U);
++ 
+++	type = xenbus_read(XBT_NIL, np->xbdev->nodename, "type", NULL);
+++	mac_str = xenbus_read(XBT_NIL, np->xbdev->otherend, "mac", NULL);
+++	if (!IS_ERR_OR_NULL( mac_str))
+++		if (!mac_pton(mac_str, mac)) {
+++			dev_info(&np->xbdev->dev, "Failed to parse MAC %s\n", mac_str);
+++			kfree(type);
+++			return -ENODEV;
+++		};
+++
++ 	if (!tx_chain_id || !rx_chain_id) {
++ 		dev_info(&np->xbdev->dev, "backend did not supplied chain id\n");
+++		kfree(type);
+++		kfree(mac_str);
++ 		return -ENODEV;
++ 	}
++ 
++-	err = rswitch_vmq_front_ndev_register(rdev, index, tx_chain_id, rx_chain_id);
+++	if (!type) {
+++		dev_info(&np->xbdev->dev, "toolstack did not supplied type\n");
+++		kfree(type);
+++		kfree(mac_str);
+++		return -ENODEV;
+++	}
+++
+++	err = rswitch_vmq_front_ndev_register(rdev, type, index, tx_chain_id,
+++					      rx_chain_id, mac_str ? mac : NULL);
+++	kfree(type);
+++
+++	if (!IS_ERR_OR_NULL(mac_str))
+++		kfree(mac_str);
+++
++ 	if (err)
++ 		return err;
++ 
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0018-rswitch-vmq-front-streamline-MAC-handling.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0018-rswitch-vmq-front-streamline-MAC-handling.patch
+new file mode 100755
+index 0000000..cf93ca3
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0018-rswitch-vmq-front-streamline-MAC-handling.patch
+@@ -0,0 +1,43 @@
++From 5ce3b32c4ea1941e2b7e24a806174b6f01638a84 Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Wed, 20 Jul 2022 22:43:27 +0300
++Subject: [PATCH 18/20] rswitch: vmq: front streamline MAC handling
++
++Set NULL to mac_str if xenbus_read() returned an error. This will
++simplify error handling and also will fix issue with VMQ0 interface
++that not always comes up during boot.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ drivers/net/ethernet/renesas/rswitch_xenfront.c | 8 ++++++--
++ 1 file changed, 6 insertions(+), 2 deletions(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch_xenfront.c b/drivers/net/ethernet/renesas/rswitch_xenfront.c
++index c01d6cd5f694..08e7688348b8 100644
++--- a/drivers/net/ethernet/renesas/rswitch_xenfront.c
+++++ b/drivers/net/ethernet/renesas/rswitch_xenfront.c
++@@ -208,7 +208,11 @@ static int rswitch_vmq_front_connect(struct net_device *dev)
++ 
++ 	type = xenbus_read(XBT_NIL, np->xbdev->nodename, "type", NULL);
++ 	mac_str = xenbus_read(XBT_NIL, np->xbdev->otherend, "mac", NULL);
++-	if (!IS_ERR_OR_NULL( mac_str))
+++
+++	if (IS_ERR(mac_str))
+++		mac_str = NULL;
+++
+++	if (mac_str)
++ 		if (!mac_pton(mac_str, mac)) {
++ 			dev_info(&np->xbdev->dev, "Failed to parse MAC %s\n", mac_str);
++ 			kfree(type);
++@@ -233,7 +237,7 @@ static int rswitch_vmq_front_connect(struct net_device *dev)
++ 					      rx_chain_id, mac_str ? mac : NULL);
++ 	kfree(type);
++ 
++-	if (!IS_ERR_OR_NULL(mac_str))
+++	if (mac_str)
++ 		kfree(mac_str);
++ 
++ 	if (err)
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0019-rswitch-vmq-complete-switch-do-GWCA1.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0019-rswitch-vmq-complete-switch-do-GWCA1.patch
+new file mode 100755
+index 0000000..835df87
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0019-rswitch-vmq-complete-switch-do-GWCA1.patch
+@@ -0,0 +1,80 @@
++From cda82c2b3d7093b754e9d4ea387fe8353569c7c0 Mon Sep 17 00:00:00 2001
++From: Dung Nguyen <dung.nguyen.zy@renesas.com>
++Date: Tue, 20 Dec 2022 13:57:41 +0700
++Subject: [PATCH 19/20] rswitch: vmq: complete switch do GWCA1
++
++Renesas changed default GWCA to GWCA1 from GWCA0. Some portions of the
++VMQ-related code was not ready for this, which caused non-working vmq0
++interface.
++
++Rework start_xmit to use CSD1, remove hardcoded magic values,
++change device port gwca.index in _front and _back drivers, set
++gwca.index to 4 in _front driver.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Signed-off-by: Dung Nguyen <dung.nguyen.zy@renesas.com>
++---
++ drivers/net/ethernet/renesas/rswitch.c          | 3 ++-
++ drivers/net/ethernet/renesas/rswitch_xenback.c  | 2 +-
++ drivers/net/ethernet/renesas/rswitch_xenfront.c | 4 +++-
++ 3 files changed, 6 insertions(+), 3 deletions(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch.c b/drivers/net/ethernet/renesas/rswitch.c
++index c112980973d0..5e3932fa5751 100644
++--- a/drivers/net/ethernet/renesas/rswitch.c
+++++ b/drivers/net/ethernet/renesas/rswitch.c
++@@ -2081,7 +2081,8 @@ static int rswitch_start_xmit(struct sk_buff *skb, struct net_device *ndev)
++ 		desc->info1 = (rdev->ts_tag << 8) | BIT(3);
++ 	}
++ 
++-	desc->info1 |= ((u64)rdev->remote_chain << 32) | ((BIT(rdev->port)) << 48) |  BIT(2);
+++	desc->info1 |= ((u64)rdev->remote_chain << DESC_INFO1_CSD1_SHIFT) |
+++		((BIT(rdev->port)) << DESC_INFO1_DV_SHIFT) |  DESC_INFO1_FMT;
++ 
++ 	skb_tx_timestamp(skb);
++ 	dma_wmb();
++diff --git a/drivers/net/ethernet/renesas/rswitch_xenback.c b/drivers/net/ethernet/renesas/rswitch_xenback.c
++index 3ba955c73108..ef4f82ac65ff 100644
++--- a/drivers/net/ethernet/renesas/rswitch_xenback.c
+++++ b/drivers/net/ethernet/renesas/rswitch_xenback.c
++@@ -64,7 +64,7 @@ rswitch_vmq_back_ndev_register(struct rswitch_private *priv, int index)
++ 	rdev->ndev = ndev;
++ 	rdev->priv = priv;
++ 	priv->rdev[RSWITCH_BACK_BASE_INDEX + index] = rdev;
++-	rdev->port = 3;
+++	rdev->port = priv->gwca.index;
++ 	rdev->etha = NULL;
++ 	rdev->remote_chain = -1;
++ 
++diff --git a/drivers/net/ethernet/renesas/rswitch_xenfront.c b/drivers/net/ethernet/renesas/rswitch_xenfront.c
++index 08e7688348b8..19486562ac0e 100644
++--- a/drivers/net/ethernet/renesas/rswitch_xenfront.c
+++++ b/drivers/net/ethernet/renesas/rswitch_xenfront.c
++@@ -80,7 +80,6 @@ static struct net_device*
++ 	rdev->front_info->xbdev = xbd;
++ 	rdev->ndev = ndev;
++ 	rdev->priv = get_priv();
++-	rdev->port = 3;
++ 	rdev->etha = NULL;
++ 	rdev->remote_chain = 0;
++ 	rdev->addr = NULL;
++@@ -114,6 +113,8 @@ static int rswitch_vmq_front_ndev_register(struct rswitch_device *rdev,
++ 
++ 	if (strcmp(type, "tsn") == 0)
++ 		rdev->port = index;
+++	else
+++		rdev->port = rdev->priv->gwca.index;
++ 
++ 	netif_napi_add(ndev, &rdev->napi, rswitch_poll, 64);
++ 
++@@ -469,6 +470,7 @@ static int renesas_vmq_of_dev_probe(struct platform_device *pdev)
++ 
++ 	priv->pdev = pdev;
++ 	priv->gwca.num_chains = 32;
+++	priv->gwca.index = 4;
++ 
++ 	err = rswitch_desc_alloc(priv);
++ 	if (err < 0)
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0020-rswtich-vmq-back-re-arrange-chains-configuration.patch b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0020-rswtich-vmq-back-re-arrange-chains-configuration.patch
+new file mode 100755
+index 0000000..3b63485
+--- /dev/null
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas/0020-rswtich-vmq-back-re-arrange-chains-configuration.patch
+@@ -0,0 +1,78 @@
++From ff7d490c2ee25657f1146396578e68dc05cacb1f Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Tue, 9 Aug 2022 21:49:10 +0300
++Subject: [PATCH 20/20] rswtich: vmq: back: re-arrange chains configuration
++
++We need to be sure that front-end already provided right entries int the LINKFIX
++table before telling hardware that it can send data to front-end chain or to
++read from them.
++
++1. Move rswitch_gwca_chain_register before registering event channels handler.
++This will ensure that we will not get TX event right after registering handler
++and before configuring chains from our side.
++
++2. Move rswitch_mfwd_set_port_based call to rswitch_vmq_back_connect()
++function to be sure that MFWD will forward packets to front-end RX chain
++after it was properly configured.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ .../net/ethernet/renesas/rswitch_xenback.c    | 22 ++++++++++++-------
++ 1 file changed, 14 insertions(+), 8 deletions(-)
++
++diff --git a/drivers/net/ethernet/renesas/rswitch_xenback.c b/drivers/net/ethernet/renesas/rswitch_xenback.c
++index ef4f82ac65ff..293737c6dc4b 100644
++--- a/drivers/net/ethernet/renesas/rswitch_xenback.c
+++++ b/drivers/net/ethernet/renesas/rswitch_xenback.c
++@@ -223,7 +223,6 @@ static int rswitch_vmq_back_probe(struct xenbus_device *dev,
++ 
++ 		be->type = RSWITCH_PV_TSN;
++ 		netif_dormant_on(rdev->ndev);
++-		rswitch_mfwd_set_port_based(be->rswitch_priv, be->if_num, be->rx_chain);
++ 	} else {
++ 		xenbus_dev_fatal(dev, err, "Unknown device type: %s ", type_str);
++ 		kfree(type_str);
++@@ -339,6 +338,9 @@ static int rswitch_vmq_back_connect(struct xenbus_device *dev)
++ 	be->tx_evtchn = tx_evt;
++ 	be->rx_evtchn = rx_evt;
++ 
+++	rswitch_gwca_chain_register(be->rswitch_priv, be->tx_chain, false);
+++	rswitch_gwca_chain_register(be->rswitch_priv, be->rx_chain, true);
+++
++ 	err = bind_interdomain_evtchn_to_irqhandler_lateeoi(
++ 		dev->otherend_id, tx_evt, rswitch_vmq_back_tx_interrupt, 0,
++ 		be->name, be);
++@@ -359,19 +361,23 @@ static int rswitch_vmq_back_connect(struct xenbus_device *dev)
++ 	}
++ 	be->rx_irq = err;
++ 
++-	rswitch_gwca_chain_register(be->rswitch_priv, be->tx_chain, false);
++-	rswitch_gwca_chain_register(be->rswitch_priv, be->rx_chain, true);
++-
++ 	notify_remote_via_evtchn(tx_evt);
++ 	notify_remote_via_evtchn(rx_evt);
++ 
++-	if (be->type == RSWITCH_PV_VMQ)
++-	{
+++	switch (be->type) {
+++	case RSWITCH_PV_VMQ:
++ 		be->rdev->remote_chain = be->rx_chain->index;
++ 		err = register_netdev(be->rdev->ndev);
++-	}
++-	else
+++		break;
+++	case RSWITCH_PV_TSN:
+++		rswitch_mfwd_set_port_based(be->rswitch_priv, be->if_num, be->rx_chain);
++ 		err = 0;
+++		break;
+++	default:
+++		WARN(1, "Unknown rswitch be->type: %d\n", be->type);
+++		err = -ENODEV;
+++		break;
+++	}
++ 
++ 	return err;
++ }
++-- 
++2.17.1
++
+diff --git a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas_%.bbappend b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas_%.bbappend
+index 7153892..caad1c4 100644
+--- a/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas_%.bbappend
++++ b/meta-aos-rcar-gen4-domd/recipes-kernel/linux/linux-renesas_%.bbappend
+@@ -19,6 +19,29 @@ SRC_URI_append = " \
+     file://0004-HACK-pcie-renesas-emulate-reading-from-ECAM-under-Xe.patch \
+ "
+ 
++SRC_URI_append = " \
++    file://0001-rswitch-move-some-definitions-to-rswitch.h.patch \
++    file://0002-rswitch-enable-support-for-direct-descriptors.patch \
++    file://0003-HACK-rswitch-export-private-date.patch \
++    file://0004-rswitch-allocate-chains-for-virtual-devices.patch \
++    file://0005-rswitch-export-functions-related-to-resource-allocat.patch \
++    file://0006-rswitch-add-ability-to-allocate-chains-with-given-id.patch \
++    file://0007-rswitch-factor-our-chain_register-function.patch \
++    file://0008-rswitch-add-definitions-for-OSID.patch \
++    file://0009-rswitch-fix-issue-with-interrupts-for-un-used-chains.patch \
++    file://0010-HACK-rswitch-allocated-descriptors-from-reserved-mem.patch \
++    file://0011-rswitch-add-Xen-PV-back-end-driver.patch \
++    file://0012-rswitch-add-XEN-PV-front-end-driver.patch \
++    file://0013-rswitch-xenback-fix-event-channel-usage.patch \
++    file://0014-rswitch-use-parent-device-for-devm-allocations.patch \
++    file://0015-rswitch-rework-port-based-forwarding.patch \
++    file://0016-rswitch_xenback-enable-correct-IRQs.patch \
++    file://0017-rswitch-vmq-add-support-for-TSNx-interfaces.patch \
++    file://0018-rswitch-vmq-front-streamline-MAC-handling.patch \
++    file://0019-rswitch-vmq-complete-switch-do-GWCA1.patch \
++    file://0020-rswtich-vmq-back-re-arrange-chains-configuration.patch \
++"
++
+ ADDITIONAL_DEVICE_TREES = "${XT_DEVICE_TREES}"
+ 
+ # Ignore in-tree defconfig
+-- 
+2.25.1
+

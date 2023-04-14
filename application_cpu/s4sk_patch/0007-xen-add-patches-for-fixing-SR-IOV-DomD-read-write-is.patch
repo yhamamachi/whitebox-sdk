@@ -1,0 +1,560 @@
+From 0e669b4f5ac4045b11afcd2a9627ba5f3f481bef Mon Sep 17 00:00:00 2001
+From: Duy Dang <duy.dang.yw@renesas.com>
+Date: Fri, 14 Apr 2023 15:56:39 +0900
+Subject: [PATCH 7/9] xen: add patches for fixing SR-IOV DomD read/write issue
+
+Signed-off-by: Duy Dang <duy.dang.yw@renesas.com>
+---
+ ...01-pci-rcar4-Dont-t-use-ECAM-mapping.patch | 40 +++++++++
+ ...se-different-TLP-types-for-root-and-.patch | 54 ++++++++++++
+ ...car4-add-delay-after-programming-ATU.patch | 36 ++++++++
+ ...d-simple-optimization-to-avoid-ATU-r.patch | 40 +++++++++
+ ...ogram-ATU-to-accesses-to-all-functio.patch | 49 +++++++++++
+ ...sc_addr-if-we-failed-to-enable-entry.patch | 28 +++++++
+ ...LL-command-after-mapping-host-events.patch | 52 ++++++++++++
+ ...clean-cache-when-sending-ITS-command.patch | 33 ++++++++
+ ...ci-header-fix-MSIX-range-calculation.patch | 32 ++++++++
+ ...h-all-buffers-not-just-command-queue.patch | 82 +++++++++++++++++++
+ .../recipes-extended/xen/xen_git.bbappend     | 10 +++
+ 11 files changed, 456 insertions(+)
+ create mode 100644 meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0001-pci-rcar4-Dont-t-use-ECAM-mapping.patch
+ create mode 100644 meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0002-SPIDER-xen-arm-Use-different-TLP-types-for-root-and-.patch
+ create mode 100644 meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0003-xen-arm-rcar4-add-delay-after-programming-ATU.patch
+ create mode 100644 meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0004-xen-arm-rcar4-add-simple-optimization-to-avoid-ATU-r.patch
+ create mode 100644 meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0005-xen-arm-rcar4-program-ATU-to-accesses-to-all-functio.patch
+ create mode 100644 meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0006-vmsi-unmap-desc_addr-if-we-failed-to-enable-entry.patch
+ create mode 100644 meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0007-its-issue-INVALL-command-after-mapping-host-events.patch
+ create mode 100644 meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0008-its-only-clean-cache-when-sending-ITS-command.patch
+ create mode 100644 meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0009-vpci-header-fix-MSIX-range-calculation.patch
+ create mode 100644 meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0010-giv3-its-flush-all-buffers-not-just-command-queue.patch
+
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0001-pci-rcar4-Dont-t-use-ECAM-mapping.patch b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0001-pci-rcar4-Dont-t-use-ECAM-mapping.patch
+new file mode 100644
+index 0000000..8fdcb3e
+--- /dev/null
++++ b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0001-pci-rcar4-Dont-t-use-ECAM-mapping.patch
+@@ -0,0 +1,40 @@
++From 16475ecdfd82e7d2cdde7dc287365eea37fb26c8 Mon Sep 17 00:00:00 2001
++From: Dmytro Semenets <dmytro_semenets@epam.com>
++Date: Tue, 6 Sep 2022 12:25:01 +0300
++Subject: [PATCH 01/10] pci: rcar4: Dont't use ECAM mapping
++
++iATU already provides correct mapping for device. We don't
++need to apply ECAM address translation logic on top of it.
++
++Signed-off-by: Dmytro Semenets <dmytro_semenets@epam.com>
++Acked-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ xen/arch/arm/pci/pci-host-rcar4.c | 5 +----
++ 1 file changed, 1 insertion(+), 4 deletions(-)
++
++diff --git a/xen/arch/arm/pci/pci-host-rcar4.c b/xen/arch/arm/pci/pci-host-rcar4.c
++index 4becf68f33..ae9c385844 100644
++--- a/xen/arch/arm/pci/pci-host-rcar4.c
+++++ b/xen/arch/arm/pci/pci-host-rcar4.c
++@@ -369,8 +369,6 @@ static void dw_pcie_prog_outbound_atu(struct pci_host_bridge *pci, int index,
++ static void __iomem *rcar4_child_map_bus(struct pci_host_bridge *bridge,
++                                          pci_sbdf_t sbdf, uint32_t where)
++ {
++-    const struct pci_ecam_ops *ops =
++-        container_of(bridge->child_ops, const struct pci_ecam_ops, pci_ops);
++     uint32_t busdev;
++ 
++     busdev = PCIE_ATU_BUS(sbdf.bus) | PCIE_ATU_DEV(PCI_SLOT(sbdf.devfn)) |
++@@ -382,8 +380,7 @@ static void __iomem *rcar4_child_map_bus(struct pci_host_bridge *bridge,
++                               bridge->child_cfg->phys_addr,
++                               busdev, bridge->child_cfg->size);
++ 
++-
++-    return pci_ecam_map_bus_generic(bridge->child_cfg, ops, sbdf, where);
+++    return bridge->child_cfg->win + where;
++ }
++ 
++ static int rcar4_child_config_read(struct pci_host_bridge *bridge,
++-- 
++2.25.1
++
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0002-SPIDER-xen-arm-Use-different-TLP-types-for-root-and-.patch b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0002-SPIDER-xen-arm-Use-different-TLP-types-for-root-and-.patch
+new file mode 100644
+index 0000000..f5ce785
+--- /dev/null
++++ b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0002-SPIDER-xen-arm-Use-different-TLP-types-for-root-and-.patch
+@@ -0,0 +1,54 @@
++From cae0db17acdc51efe09cbab2f2fa41684047046f Mon Sep 17 00:00:00 2001
++From: Dmytro Semenets <dmytro_semenets@epam.com>
++Date: Tue, 6 Sep 2022 12:55:52 +0300
++Subject: [PATCH 02/10] [SPIDER] xen/arm: Use different TLP types for root and
++ non-root buses
++
++Documentation is unclear but acoording to linux driver different TLB tipes
++should be used for root and non-root buses.
++Present method for determining root bus - perhaps workarround based on
++assumption root bus has number 0 or 1.
++
++Signed-off-by: Dmytro Semenets <dmytro_semenets@epam.com>
++Acked-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ xen/arch/arm/pci/pci-host-rcar4.c | 11 ++++++++---
++ 1 file changed, 8 insertions(+), 3 deletions(-)
++
++diff --git a/xen/arch/arm/pci/pci-host-rcar4.c b/xen/arch/arm/pci/pci-host-rcar4.c
++index ae9c385844..1e1a0d954d 100644
++--- a/xen/arch/arm/pci/pci-host-rcar4.c
+++++ b/xen/arch/arm/pci/pci-host-rcar4.c
++@@ -103,6 +103,7 @@ const struct pci_ecam_ops rcar4_pcie_ops = {
++ #define PCIE_ATU_REGION_INDEX1  0x1
++ #define PCIE_ATU_TYPE_IO        0x2
++ #define PCIE_ATU_TYPE_CFG0      0x4
+++#define PCIE_ATU_TYPE_CFG1      0x5
++ 
++ #define PCIE_ATU_BUS(x)         FIELD_PREP(GENMASK(31, 24), x)
++ #define PCIE_ATU_DEV(x)         FIELD_PREP(GENMASK(23, 19), x)
++@@ -370,14 +371,18 @@ static void __iomem *rcar4_child_map_bus(struct pci_host_bridge *bridge,
++                                          pci_sbdf_t sbdf, uint32_t where)
++ {
++     uint32_t busdev;
+++    int type;
++ 
++     busdev = PCIE_ATU_BUS(sbdf.bus) | PCIE_ATU_DEV(PCI_SLOT(sbdf.devfn)) |
++         PCIE_ATU_FUNC(PCI_FUNC(sbdf.devfn));
++ 
++-    /* FIXME: Parent is the root bus, so use PCIE_ATU_TYPE_CFG0. */
+++    /* TODO: Correct method to determine root bus. */
+++    if (sbdf.bus <= 1)
+++        type = PCIE_ATU_TYPE_CFG0;
+++    else
+++        type = PCIE_ATU_TYPE_CFG1;
++     dw_pcie_prog_outbound_atu(bridge, PCIE_ATU_REGION_INDEX1,
++-                              PCIE_ATU_TYPE_CFG0,
++-                              bridge->child_cfg->phys_addr,
+++                              type, bridge->child_cfg->phys_addr,
++                               busdev, bridge->child_cfg->size);
++ 
++     return bridge->child_cfg->win + where;
++-- 
++2.25.1
++
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0003-xen-arm-rcar4-add-delay-after-programming-ATU.patch b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0003-xen-arm-rcar4-add-delay-after-programming-ATU.patch
+new file mode 100644
+index 0000000..1ae3e46
+--- /dev/null
++++ b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0003-xen-arm-rcar4-add-delay-after-programming-ATU.patch
+@@ -0,0 +1,36 @@
++From cf39316c4833b5af37e89b7f30d694ae5d711f74 Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Thu, 29 Sep 2022 01:40:57 +0300
++Subject: [PATCH 03/10] xen/arm: rcar4: add delay after programming ATU
++
++For some reason, we need a delay before accessing ATU region after
++we programmed it. Otherwise, we'll get erroneous TLP.
++
++There is a code below, which should do this in proper way, by polling
++CTRL2 register, but according to documentation, hardware does not
++change this ATU_ENABLE bit at all.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ xen/arch/arm/pci/pci-host-rcar4.c | 5 +++++
++ 1 file changed, 5 insertions(+)
++
++diff --git a/xen/arch/arm/pci/pci-host-rcar4.c b/xen/arch/arm/pci/pci-host-rcar4.c
++index 1e1a0d954d..526f8b063f 100644
++--- a/xen/arch/arm/pci/pci-host-rcar4.c
+++++ b/xen/arch/arm/pci/pci-host-rcar4.c
++@@ -290,6 +290,11 @@ static void dw_pcie_prog_outbound_atu_unroll(struct pci_host_bridge *pci,
++     dw_pcie_writel_ob_unroll(pci, index, PCIE_ATU_UNR_REGION_CTRL2,
++                              PCIE_ATU_ENABLE);
++ 
+++    /*
+++     * HACK: We need to delay there, because the next code does not
+++     * work as expected on S4
+++     */
+++    mdelay(1);
++     /*
++      * Make sure ATU enable takes effect before any subsequent config
++      * and I/O accesses.
++-- 
++2.25.1
++
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0004-xen-arm-rcar4-add-simple-optimization-to-avoid-ATU-r.patch b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0004-xen-arm-rcar4-add-simple-optimization-to-avoid-ATU-r.patch
+new file mode 100644
+index 0000000..949d679
+--- /dev/null
++++ b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0004-xen-arm-rcar4-add-simple-optimization-to-avoid-ATU-r.patch
+@@ -0,0 +1,40 @@
++From 3e0ba0e58f3199b058883e0a4d60438bad7dac7d Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Thu, 29 Sep 2022 01:43:27 +0300
++Subject: [PATCH 04/10] xen/arm: rcar4: add simple optimization to avoid ATU
++ reprogramming
++
++There are high chances that there will be a number of a consecutive
++accesses to configuration space of one device. To speed things up,
++we can program ATU only during first access.
++
++This is mostly beneficial taking into account the previous patch that
++adds 1ms delay after ATU reprogramming.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ xen/arch/arm/pci/pci-host-rcar4.c | 8 ++++++++
++ 1 file changed, 8 insertions(+)
++
++diff --git a/xen/arch/arm/pci/pci-host-rcar4.c b/xen/arch/arm/pci/pci-host-rcar4.c
++index 526f8b063f..cd5578c48e 100644
++--- a/xen/arch/arm/pci/pci-host-rcar4.c
+++++ b/xen/arch/arm/pci/pci-host-rcar4.c
++@@ -368,6 +368,14 @@ static void dw_pcie_prog_outbound_atu(struct pci_host_bridge *pci, int index,
++                                       int type, uint64_t cpu_addr,
++                                       uint64_t pci_addr, uint64_t size)
++ {
+++    static uint64_t prev_addr = ~0;
+++
+++    /* Simple optimization to not-program ATU for every transaction */
+++    if (prev_addr == pci_addr)
+++        return;
+++
+++    prev_addr = pci_addr;
+++
++     __dw_pcie_prog_outbound_atu(pci, 0, index, type,
++                                 cpu_addr, pci_addr, size);
++ }
++-- 
++2.25.1
++
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0005-xen-arm-rcar4-program-ATU-to-accesses-to-all-functio.patch b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0005-xen-arm-rcar4-program-ATU-to-accesses-to-all-functio.patch
+new file mode 100644
+index 0000000..5513ae4
+--- /dev/null
++++ b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0005-xen-arm-rcar4-program-ATU-to-accesses-to-all-functio.patch
+@@ -0,0 +1,49 @@
++From e9a27792c02f684e008566f7ef95fdf7ddb05595 Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Thu, 29 Sep 2022 01:47:13 +0300
++Subject: [PATCH 05/10] xen/arm: rcar4: program ATU to accesses to all
++ functions
++
++According to ATU documentation, bits [18:16] of accessed memory
++address correspond to a function number. This is somewhat similar to
++ECAM, but with huge holes between regions.
++
++We can use this to minimize number of ATU re-programmings: configure
++ATU to access BDF with F=0 and adjust memory address with function
++number.
++
++Taking into account the previous patch, that optimizes ATU
++reprogramming by skipping call to __dw_pcie_prog_outbound_atu() if we
++already configured pci_address, we can be sure that accesses to all
++functions of one device will not trigger ATU reprogramming at all.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ xen/arch/arm/pci/pci-host-rcar4.c | 4 ++--
++ 1 file changed, 2 insertions(+), 2 deletions(-)
++
++diff --git a/xen/arch/arm/pci/pci-host-rcar4.c b/xen/arch/arm/pci/pci-host-rcar4.c
++index cd5578c48e..a1dc0538f5 100644
++--- a/xen/arch/arm/pci/pci-host-rcar4.c
+++++ b/xen/arch/arm/pci/pci-host-rcar4.c
++@@ -387,7 +387,7 @@ static void __iomem *rcar4_child_map_bus(struct pci_host_bridge *bridge,
++     int type;
++ 
++     busdev = PCIE_ATU_BUS(sbdf.bus) | PCIE_ATU_DEV(PCI_SLOT(sbdf.devfn)) |
++-        PCIE_ATU_FUNC(PCI_FUNC(sbdf.devfn));
+++        PCIE_ATU_FUNC(0);
++ 
++     /* TODO: Correct method to determine root bus. */
++     if (sbdf.bus <= 1)
++@@ -398,7 +398,7 @@ static void __iomem *rcar4_child_map_bus(struct pci_host_bridge *bridge,
++                               type, bridge->child_cfg->phys_addr,
++                               busdev, bridge->child_cfg->size);
++ 
++-    return bridge->child_cfg->win + where;
+++    return bridge->child_cfg->win + ((uint32_t)sbdf.fn << 16) + where;
++ }
++ 
++ static int rcar4_child_config_read(struct pci_host_bridge *bridge,
++-- 
++2.25.1
++
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0006-vmsi-unmap-desc_addr-if-we-failed-to-enable-entry.patch b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0006-vmsi-unmap-desc_addr-if-we-failed-to-enable-entry.patch
+new file mode 100644
+index 0000000..1011fbc
+--- /dev/null
++++ b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0006-vmsi-unmap-desc_addr-if-we-failed-to-enable-entry.patch
+@@ -0,0 +1,28 @@
++From dd19325676b67752d29f7f8a446bd3da4f51c440 Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Tue, 15 Nov 2022 02:19:15 +0200
++Subject: [PATCH 06/10] vmsi: unmap desc_addr if we failed to enable entry
++
++Error path in vpci_msi_arch_enable misses call to `iounmap` which is
++present in normal path. Fix this.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ xen/drivers/vpci/arm_vmsi.c | 1 +
++ 1 file changed, 1 insertion(+)
++
++diff --git a/xen/drivers/vpci/arm_vmsi.c b/xen/drivers/vpci/arm_vmsi.c
++index eb432ecae3..8c6c18ce55 100644
++--- a/xen/drivers/vpci/arm_vmsi.c
+++++ b/xen/drivers/vpci/arm_vmsi.c
++@@ -139,6 +139,7 @@ int vpci_msix_arch_enable_entry(struct vpci_msix_entry *entry,
++     ret = vpci_get_msi_base(pdev, &msi_base);
++     if ( ret )
++     {
+++        iounmap(desc_addr);
++         return ret;
++     }
++ 
++-- 
++2.25.1
++
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0007-its-issue-INVALL-command-after-mapping-host-events.patch b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0007-its-issue-INVALL-command-after-mapping-host-events.patch
+new file mode 100644
+index 0000000..3713d57
+--- /dev/null
++++ b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0007-its-issue-INVALL-command-after-mapping-host-events.patch
+@@ -0,0 +1,52 @@
++From 37d14f9947f2574c1375adf3d03df8243fb8e445 Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Tue, 15 Nov 2022 02:21:26 +0200
++Subject: [PATCH 07/10] its: issue INVALL command after mapping host events
++
++Implement TODO and call INVALL command. Looks like this fixes
++issue with not working interrupts on RCAR S4, after we add
++SR-IOV virtual PCI function.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ xen/arch/arm/gic-v3-its.c | 17 ++++++++++++++++-
++ 1 file changed, 16 insertions(+), 1 deletion(-)
++
++diff --git a/xen/arch/arm/gic-v3-its.c b/xen/arch/arm/gic-v3-its.c
++index 852a03b747..22290ecd37 100644
++--- a/xen/arch/arm/gic-v3-its.c
+++++ b/xen/arch/arm/gic-v3-its.c
++@@ -318,6 +318,19 @@ static int its_send_cmd_inv(struct host_its *its,
++     return its_send_command(its, cmd);
++ }
++ 
+++static int its_send_cmd_invall(struct host_its *its,
+++                               uint32_t collection_id)
+++{
+++    uint64_t cmd[4];
+++
+++    cmd[0] = GITS_CMD_INVALL;
+++    cmd[1] = 0x00;
+++    cmd[2] = collection_id;
+++    cmd[3] = 0x00;
+++
+++    return its_send_command(its, cmd);
+++}
+++
++ /* Set up the (1:1) collection mapping for the given host CPU. */
++ int gicv3_its_setup_collection(unsigned int cpu)
++ {
++@@ -708,7 +721,9 @@ static int gicv3_its_map_host_events(struct host_its *its,
++             return ret;
++     }
++ 
++-    /* TODO: Consider using INVALL here. Didn't work on the model, though. */
+++    ret = its_send_cmd_invall(its, 0);
+++    if ( ret )
+++        return ret;
++ 
++     ret = its_send_cmd_sync(its, 0);
++     if ( ret )
++-- 
++2.25.1
++
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0008-its-only-clean-cache-when-sending-ITS-command.patch b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0008-its-only-clean-cache-when-sending-ITS-command.patch
+new file mode 100644
+index 0000000..a5a2d28
+--- /dev/null
++++ b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0008-its-only-clean-cache-when-sending-ITS-command.patch
+@@ -0,0 +1,33 @@
++From fe7142bca56b5c8c8109f581444f89ae09b7544f Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Tue, 15 Nov 2022 02:24:33 +0200
++Subject: [PATCH 08/10] its: only clean cache when sending ITS command
++
++There is no need to invalidate cache entry because we just wrote that
++memory. So it is guaranteed that cache entry is valid.
++
++But we need to clean (flush) cache line to be sure that ITS sees
++command written into the memory.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ xen/arch/arm/gic-v3-its.c | 3 +--
++ 1 file changed, 1 insertion(+), 2 deletions(-)
++
++diff --git a/xen/arch/arm/gic-v3-its.c b/xen/arch/arm/gic-v3-its.c
++index 22290ecd37..eba2fec0b2 100644
++--- a/xen/arch/arm/gic-v3-its.c
+++++ b/xen/arch/arm/gic-v3-its.c
++@@ -190,8 +190,7 @@ static int its_send_command(struct host_its *hw_its, const void *its_cmd)
++ 
++     memcpy(hw_its->cmd_buf + writep, its_cmd, ITS_CMD_SIZE);
++     if ( hw_its->flags & HOST_ITS_FLUSH_CMD_QUEUE )
++-        clean_and_invalidate_dcache_va_range(hw_its->cmd_buf + writep,
++-                                             ITS_CMD_SIZE);
+++        clean_dcache_va_range(hw_its->cmd_buf + writep, ITS_CMD_SIZE);
++     else
++         dsb(ishst);
++ 
++-- 
++2.25.1
++
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0009-vpci-header-fix-MSIX-range-calculation.patch b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0009-vpci-header-fix-MSIX-range-calculation.patch
+new file mode 100644
+index 0000000..2d99d21
+--- /dev/null
++++ b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0009-vpci-header-fix-MSIX-range-calculation.patch
+@@ -0,0 +1,32 @@
++From 86404f7b2d30ecb8dfd3a2954a1f862fc55aff33 Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Sat, 26 Nov 2022 03:30:03 +0200
++Subject: [PATCH 09/10] vpci/header: fix MSIX range calculation
++
++modify_bars() function incorrectly calculates end of MSI-X table
++address: it does not converts end address to PFN. This leads to
++the invalid BAR assignment.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ xen/drivers/vpci/header.c | 4 ++--
++ 1 file changed, 2 insertions(+), 2 deletions(-)
++
++diff --git a/xen/drivers/vpci/header.c b/xen/drivers/vpci/header.c
++index 248b444413..cf841c404f 100644
++--- a/xen/drivers/vpci/header.c
+++++ b/xen/drivers/vpci/header.c
++@@ -343,8 +343,8 @@ static int modify_bars(const struct pci_dev *pdev, uint16_t cmd, bool rom_only)
++     for ( i = 0; msix && i < ARRAY_SIZE(msix->tables); i++ )
++     {
++         unsigned long start = PFN_DOWN(vmsix_table_addr(pdev->vpci, i));
++-        unsigned long end = vmsix_table_addr(pdev->vpci, i) +
++-                            vmsix_table_size(pdev->vpci, i) - 1;
+++        unsigned long end =  PFN_DOWN(vmsix_table_addr(pdev->vpci, i) +
+++                                      vmsix_table_size(pdev->vpci, i) - 1);
++ 
++         for ( j = 0; j < ARRAY_SIZE(header->bars); j++ )
++         {
++-- 
++2.25.1
++
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0010-giv3-its-flush-all-buffers-not-just-command-queue.patch b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0010-giv3-its-flush-all-buffers-not-just-command-queue.patch
+new file mode 100644
+index 0000000..99519f2
+--- /dev/null
++++ b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/files/0010-giv3-its-flush-all-buffers-not-just-command-queue.patch
+@@ -0,0 +1,82 @@
++From 22ea23577909f9cca10ee0e149a04388f67c090a Mon Sep 17 00:00:00 2001
++From: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++Date: Mon, 5 Dec 2022 17:14:14 +0200
++Subject: [PATCH 10/10] giv3-its: flush all buffers, not just command queue
++
++ITS manages Device Tables and Interrupt Translation Tables on its
++own, so generally we are not interested which shareability and
++cacheability attributes it use. But there is one exception: ITS
++requires that DT and ITT must be initialized with zeroes. If ITS
++belongs to the Inner Cacheability domain there is problem at all.
++
++But in all other cases we need to do clean CPU caches manually, or
++otherwise CPU can overwrite DT and ITT entries. From user perspective
++this looks like we are not receiving interrupts.
++
++Also, we will rename HOST_ITS_FLUSH_CMD_QUEUE flag to
++HOST_ITS_FLUSH_BUFFERS because now this flag controls not only command
++queue.
++
++Signed-off-by: Volodymyr Babchuk <volodymyr_babchuk@epam.com>
++---
++ xen/arch/arm/gic-v3-its.c             | 9 +++++++--
++ xen/arch/arm/include/asm/gic_v3_its.h | 2 +-
++ 2 files changed, 8 insertions(+), 3 deletions(-)
++
++diff --git a/xen/arch/arm/gic-v3-its.c b/xen/arch/arm/gic-v3-its.c
++index eba2fec0b2..e98de1f1f3 100644
++--- a/xen/arch/arm/gic-v3-its.c
+++++ b/xen/arch/arm/gic-v3-its.c
++@@ -189,7 +189,7 @@ static int its_send_command(struct host_its *hw_its, const void *its_cmd)
++     }
++ 
++     memcpy(hw_its->cmd_buf + writep, its_cmd, ITS_CMD_SIZE);
++-    if ( hw_its->flags & HOST_ITS_FLUSH_CMD_QUEUE )
+++    if ( hw_its->flags & HOST_ITS_FLUSH_BUFFERS )
++         clean_dcache_va_range(hw_its->cmd_buf + writep, ITS_CMD_SIZE);
++     else
++         dsb(ishst);
++@@ -447,7 +447,7 @@ static void *its_map_cbaser(struct host_its *its)
++      */
++     if ( !(reg & GITS_BASER_INNER_CACHEABILITY_MASK) )
++     {
++-        its->flags |= HOST_ITS_FLUSH_CMD_QUEUE;
+++        its->flags |= HOST_ITS_FLUSH_BUFFERS;
++         printk(XENLOG_WARNING "using non-cacheable ITS command queue\n");
++     }
++ 
++@@ -492,6 +492,8 @@ retry:
++         return -ERANGE;
++     }
++ 
+++    clean_dcache_va_range(buffer, table_size);
+++
++     reg  = attr;
++     reg |= (pagesz << GITS_BASER_PAGE_SIZE_SHIFT);
++     reg |= (table_size >> BASER_PAGE_BITS(pagesz)) - 1;
++@@ -841,6 +843,9 @@ int gicv3_its_map_guest_device(struct domain *d,
++     if ( !itt_addr )
++         goto out_unlock;
++ 
+++    if ( hw_its->flags & HOST_ITS_FLUSH_BUFFERS )
+++        clean_dcache_va_range(itt_addr, nr_events * hw_its->itte_size);
+++
++     dev = xzalloc(struct its_device);
++     if ( !dev )
++         goto out_unlock;
++diff --git a/xen/arch/arm/include/asm/gic_v3_its.h b/xen/arch/arm/include/asm/gic_v3_its.h
++index 7c3dd06ad7..e37b0d3c82 100644
++--- a/xen/arch/arm/include/asm/gic_v3_its.h
+++++ b/xen/arch/arm/include/asm/gic_v3_its.h
++@@ -109,7 +109,7 @@
++ #include <xen/device_tree.h>
++ #include <xen/rbtree.h>
++ 
++-#define HOST_ITS_FLUSH_CMD_QUEUE        (1U << 0)
+++#define HOST_ITS_FLUSH_BUFFERS          (1U << 0)
++ #define HOST_ITS_USES_PTA               (1U << 1)
++ 
++ #define HOST_ITS_WORKAROUND_NC_NS       (1U << 0)
++-- 
++2.25.1
++
+diff --git a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/xen_git.bbappend b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/xen_git.bbappend
+index be23f75..a6a8a8e 100644
+--- a/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/xen_git.bbappend
++++ b/meta-aos-rcar-gen4-driver-domain/recipes-extended/xen/xen_git.bbappend
+@@ -2,6 +2,16 @@ FILESEXTRAPATHS_prepend := "${THISDIR}/files:"
+ 
+ SRC_URI_append_s4sk-proto = " \
+     file://early_printk_s4sk-proto.cfg \
++    file://0001-pci-rcar4-Dont-t-use-ECAM-mapping.patch \
++    file://0002-SPIDER-xen-arm-Use-different-TLP-types-for-root-and-.patch \
++    file://0003-xen-arm-rcar4-add-delay-after-programming-ATU.patch \
++    file://0004-xen-arm-rcar4-add-simple-optimization-to-avoid-ATU-r.patch \
++    file://0005-xen-arm-rcar4-program-ATU-to-accesses-to-all-functio.patch \
++    file://0006-vmsi-unmap-desc_addr-if-we-failed-to-enable-entry.patch \
++    file://0007-its-issue-INVALL-command-after-mapping-host-events.patch \
++    file://0008-its-only-clean-cache-when-sending-ITS-command.patch \
++    file://0009-vpci-header-fix-MSIX-range-calculation.patch \
++    file://0010-giv3-its-flush-all-buffers-not-just-command-queue.patch \
+ "
+ 
+ do_configure_append() {
+-- 
+2.25.1
+
