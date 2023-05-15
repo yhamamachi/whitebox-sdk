@@ -2,14 +2,28 @@
 
 BASE_DIR=$(cd `dirname $0` && pwd)
 
-cd ${BASE_DIR}/mcu
-./build_g4mh_full.sh
-
-cd ${BASE_DIR}/realtime_cpu
-./build_cr52.sh
-
-cd ${BASE_DIR}/application_cpu
-./build_ca55.sh
+if [ "$1" == "spider" ]; then
+    cd ${BASE_DIR}/mcu
+    ./build_g4mh_full.sh
+    
+    cd ${BASE_DIR}/realtime_cpu
+    ./build_cr52.sh
+	
+    cd ${BASE_DIR}/application_cpu
+    ./build_ca55.sh
+elif [ "$1" == "s4sk" ]; then
+    cd ${BASE_DIR}/mcu
+    ./build_g4mh_full.sh
+    
+    cd ${BASE_DIR}/realtime_cpu
+    ./build_cr52_s4sk.sh
+	
+    cd ${BASE_DIR}/application_cpu
+    ./build_ca55_s4sk.sh
+else
+    echo "Please specify the target board to build: \"spider\" or \"s4sk\""
+    exit 1
+fi
 
 cd ${BASE_DIR}
 mkdir -p deploy
