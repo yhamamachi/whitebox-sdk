@@ -1,0 +1,52 @@
+name: Build Whitebox-SDK test
+run-name: Build Whitebox SDK
+on:
+  push:
+    branches:
+      - '*-dev'
+jobs:
+  Build-test:
+    name: Build test
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Decrypt large secret
+        env:
+          LARGE_SECRET_PASSPHRASE: ${{ secrets.LARGE_SECRET_PASSPHRASE }}
+        run: |
+          ./.github/workflows/decrypt_secret.sh
+          ls ./tool/
+
+      - name: Run setup script
+        run: |
+          # Workaroud for wine install
+          sudo dpkg --add-architecture i386
+          sudo dpkg -l | awk '/ii  lib.*deb.sury.org/ {gsub(/:.*/, s, $2); print $2}' \
+              | xargs apt show -a \
+              | awk '/Package:/ {p=$2} /APT-Sources: .*focal\/main/ {print p"/focal"}' \
+              | sudo xargs eatmydata apt install --allow-downgrades
+          # run setup script
+          cd ./tool && ./setup_whitebox.sh
+          ccrh -V
+
+      - name: Setup github config
+        run: |
+          git config --global user.name "ations-user"
+          git config --global user.email "action@github.com"
+
+      - name: Run G4MH SafeG-Auto build
+        run: |
+          ./mcu/build_safegauto.sh
+
+      - name: Run G4MH Trampoline build
+        run: |
+          ./mcu/build_trampoline.sh
+
+      - name: Run CR52 Zephyr build
+        run: |
+          ./realtime_cpu/build_zephyr.sh
+
+      - name: Run CR52 Trampoline build
+        run: |
+          ./realtime_cpu/build_trampoline.sh
+
