@@ -1,5 +1,5 @@
-name: Build Whitebox-SDK test
-run-name: Build Whitebox SDK
+name: Build Whitebox SDK(G4MH/CR52)
+run-name: Build Whitebox SDK(G4MH/CR52)
 on:
   push:
     branches:

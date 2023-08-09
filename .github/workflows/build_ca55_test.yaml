@@ -1,0 +1,62 @@
+name: Build Whitebox SDK(CA55)
+run-name: Build Whitebox SDK(CA55)
+on:
+  push:
+    branches:
+      - '*-dev'
+  workflow_dispatch:
+
+jobs:
+  Check-disk:
+    name: check disk
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@v7
+        with:
+          root-reserve-mb: 4096
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+
+      - uses: actions/checkout@v3
+      - name: Decrypt large secret
+        env:
+          LARGE_SECRET_PASSPHRASE: ${{ secrets.LARGE_SECRET_PASSPHRASE }}
+        run: |
+          ./.github/workflows/decrypt_secret.sh
+          ls ./tool/
+
+      - name: Run setup script
+        run: |
+          # Workaroud for wine install
+          sudo dpkg --add-architecture i386
+          sudo dpkg -l | awk '/ii  lib.*deb.sury.org/ {gsub(/:.*/, s, $2); print $2}' \
+              | xargs apt show -a \
+              | awk '/Package:/ {p=$2} /APT-Sources: .*focal\/main/ {print p"/focal"}' \
+              | sudo xargs eatmydata apt install --allow-downgrades
+          # run setup script
+          cd ./tool && ./setup_ca55.sh
+          # Clean up apt
+          sudo apt autoremove -y
+          sudo apt clean -y
+          sudo apt autoclean -y
+
+      - name: Check disk and memory
+        run: |
+          ls -lh
+          df -h
+          free -h
+
+      - name: Setup github config
+        run: |
+          git config --global user.name "ations-user"
+          git config --global user.email "action@github.com"
+
+      - name: Run CA55 Xen Hypervisor build
+        run: |
+          ./application_cpu/build_ca55.sh
+
