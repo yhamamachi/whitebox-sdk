@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - 'dev-ghactions'
+  workflow_dispatch:
+
 jobs:
   Check-disk:
     name: check disk
