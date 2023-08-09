@@ -36,17 +36,17 @@ jobs:
 
       - name: Run G4MH SafeG-Auto build
         run: |
-          ./mcu/build_safegauto.sh
+          ./mcu/build_safegauto.sh spider
 
       - name: Run G4MH Trampoline build
         run: |
-          ./mcu/build_trampoline.sh
+          ./mcu/build_trampoline.sh spider
 
       - name: Run CR52 Zephyr build
         run: |
-          ./realtime_cpu/build_zephyr.sh
+          ./realtime_cpu/build_zephyr.sh spider
 
       - name: Run CR52 Trampoline build
         run: |
-          ./realtime_cpu/build_trampoline.sh
+          ./realtime_cpu/build_trampoline.sh spider
 

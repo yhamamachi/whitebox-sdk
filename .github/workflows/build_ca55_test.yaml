@@ -58,5 +58,5 @@ jobs:
 
       - name: Run CA55 Xen Hypervisor build
         run: |
-          ./application_cpu/build_ca55.sh
+          ./application_cpu/build_ca55.sh spider
 
