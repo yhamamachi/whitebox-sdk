@@ -7,10 +7,11 @@ IPL_PATH=${WORK_BASE}
 MOT_PATH=${WORK_BASE}
 
 BURN_PATTERN=-1
+WRITE_PATTERN=all
 
 # Burn patterns: G4MH, CR52
 BURN_PATTERNS=( "dummy" "dummy" # -0(dummy)
-    "Trampoline" "Trampoline"  # -1
+    "Trampoline" "Trampoline (default)"  # -1
     "SafeG-Auto" "Trampoline"  # -2
     "Trampoline" "Zephyr"      # -3
     "SafeG-Auto" "Zephyr"      # -4
@@ -19,7 +20,7 @@ BURN_PATTERS_NUM=$((${#BURN_PATTERNS[@]} / 2  -1))
 
 Usage() {
     echo "Usage:"
-    echo "    $0 board [option]"
+    echo "    $0 board [option] [option2]"
     echo "board:"
     echo "    - spider: for S4 Spider"
     echo "    - s4sk: for S4 Starter Kit"
@@ -30,6 +31,11 @@ Usage() {
         echo -e "CR52=${BURN_PATTERNS[$((2*$key+1))]}"
     done
     echo "    -h: Show this usage"
+
+    echo "option2:"
+    echo "    all: All writes (default)"
+    echo "    g4mh: Only g4mh writes"
+    echo "    cr52: Only cr52 writes"
 }
 
 if [[ $# < 1 ]] ; then
@@ -45,10 +51,22 @@ elif [[ "$1" != "spider" ]] && [[ "$1" != "s4sk" ]]; then
 fi
 
 # Without option, pattern 1 is selected by default.
-if [[ $# < 2 ]]; then
-    $0 $1 -1
-    exit
-elif [[ $# > 2 ]]; then # option can be used only one
+if [[ $# < 3 ]]; then
+    if [[ $# < 2 ]]; then
+        $0 $1 -1 all
+        exit
+    fi
+    if [[ "$2" == "all" ]] || [[ "$2" == "g4mh" ]] || [[ "$2" == "cr52" ]]; then
+        $0 $1 -1 $2
+        exit
+    elif  [[ "$2" == "-1" ]] || [[ "$2" == "-2" ]] || [[ "$2" == "-3" ]] || [[ "$2" == "-4" ]]; then
+        $0 $1 $2 all
+        exit
+    else
+        echo -e "\e[31mERROR: Unsupported option\e[m"
+	Usage; exit
+    fi
+elif [[ $# > 3 ]]; then # option can be used only one
     Usage; exit
 fi
 
@@ -64,6 +82,17 @@ do
 done
 G4MH=${BURN_PATTERNS[$((2*${BURN_PATTERN}+0))]}
 CR52=${BURN_PATTERNS[$((2*${BURN_PATTERN}+1))]}
+
+if [[ "$3" == "all" ]]; then
+    WRITE_PATTERN=all
+elif [[ "$3" == "g4mh" ]]; then
+    WRITE_PATTERN=g4mh
+elif [[ "$3" == "cr52" ]]; then
+    WRITE_PATTERN=rtos
+else
+    echo -e "\e[31mERROR: Unsupported option\e[m"
+    Usage; exit
+fi
 
 if [ ! -d "deploy" ]; then
   echo -e "\e[31mERROR: Please copy the built deploy directory\e[m"
@@ -82,4 +111,4 @@ esac
 sed -i 's/S315EB23695000000000000010E2000000000000000031/S315EB23695000000000000004400000000000000000DF/g' cert_header_sa9.srec
 
 # Flash IPL
-python3 ipl_burning.py $1 $USB_PORT $MOT_PATH $IPL_PATH all
+python3 ipl_burning.py $1 $USB_PORT $MOT_PATH $IPL_PATH $WRITE_PATTERN
