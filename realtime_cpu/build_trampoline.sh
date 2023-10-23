@@ -59,6 +59,7 @@ if [[ ! -e ${SOURCE_DIR} || "$CLEAN_BUILD_FLAG" == "true" ]]; then
     git reset --hard ${COMMIT} ; git clean -df
 
     # prepare Benchmarks code
+    rm -rf examples/cortex-a/armv8
     git am ${SCRIPT_DIR}/patchset_trampoline/*.patch
     git submodule init
     git submodule update net/ethernet/lwip
