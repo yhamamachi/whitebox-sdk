@@ -51,8 +51,9 @@ fi
 
 # Prepare source
 if [[ ! -e ${SOURCE_DIR} || "$CLEAN_BUILD_FLAG" == "true" ]]; then
-    rm -rf ${SOURCE_DIR}
-    git clone ${GITHUB_URL} ${SOURCE_DIR}
+    if [ ! -e ${SOURCE_DIR} ]; then
+        git clone ${GITHUB_URL} ${SOURCE_DIR}
+    fi
 
     cd ${SOURCE_DIR}
     git reset --hard ${COMMIT} ; git clean -df
@@ -99,31 +100,31 @@ bash ./build.sh
 # deploy
 rm -rf ${SCRIPT_DIR}/deploy
 mkdir -p ${SCRIPT_DIR}/deploy
-arm-none-eabi-objcopy -O srec --srec-forceS3 sample_exe.elf $SCRIPT_DIR/deploy/cr52.srec
+arm-none-eabi-objcopy --adjust-vma 0xe2100000 -O srec --srec-forceS3 sample_exe.elf $SCRIPT_DIR/deploy/cr52.srec
 
 # build eathernet
 cd ${SOURCE_DIR}/examples/cortex-a/armv8/spider/ethernet
 chmod +x ./build.sh
 ./build.sh
 mkdir -p ${SCRIPT_DIR}/deploy
-arm-none-eabi-objcopy -O srec --srec-forceS3 eth_exe.elf $SCRIPT_DIR/deploy/cr52_eth.srec
+arm-none-eabi-objcopy --adjust-vma 0xe2100000 -O srec --srec-forceS3 eth_exe.elf $SCRIPT_DIR/deploy/cr52_eth.srec
 
 cd ${SOURCE_DIR}/examples/cortex-a/armv8/spider/lwip
 chmod +x ./build.sh
 ./build.sh
 mkdir -p ${SCRIPT_DIR}/deploy
-arm-none-eabi-objcopy -O srec --srec-forceS3 lwip_exe.elf $SCRIPT_DIR/deploy/cr52_lwip.srec
+arm-none-eabi-objcopy --adjust-vma 0xe2100000 -O srec --srec-forceS3 lwip_exe.elf $SCRIPT_DIR/deploy/cr52_lwip.srec
 
 cd ${SOURCE_DIR}/examples/cortex-a/armv8/spider/ethernet_basic
 chmod +x ./build.sh
 ./build.sh
 mkdir -p ${SCRIPT_DIR}/deploy
-arm-none-eabi-objcopy -O srec --srec-forceS3 eth_exe.elf $SCRIPT_DIR/deploy/cr52_eth_basic.srec
+arm-none-eabi-objcopy --adjust-vma 0xe2100000 -O srec --srec-forceS3 eth_exe.elf $SCRIPT_DIR/deploy/cr52_eth_basic.srec
 
 # build can demo
 cd ${SOURCE_DIR}/examples/cortex-a/armv8/spider/can_demo
 chmod +x ./build.sh
 ./build.sh
 mkdir -p ${SCRIPT_DIR}/deploy
-arm-none-eabi-objcopy -O srec --srec-forceS3 can_demo_exe.elf $SCRIPT_DIR/deploy/cr52_can_demo.srec
+arm-none-eabi-objcopy --adjust-vma 0xe2100000 -O srec --srec-forceS3 can_demo_exe.elf $SCRIPT_DIR/deploy/cr52_can_demo.srec
 
