@@ -18,3 +18,8 @@ fi
 ./setup_cr52.sh
 ./setup_safeg.sh
 
+# あとでどのスクリプトに属するべきか判別して整理する必要あり。
+sudo apt install picocom -y
+sudo pip3 install pyserial
+sudo pip3 install pyserial --upgrade
+
