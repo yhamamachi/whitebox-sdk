@@ -1,6 +1,7 @@
 #!/bin/bash
 
 ZIPNAME=CC-RH_V20500_setup-doc.zip
+cd $(dirname $0)
 
 if [[ ! $ZIPNAME = /* ]]; then
   ZIPNAME=$(pwd)/$ZIPNAME
