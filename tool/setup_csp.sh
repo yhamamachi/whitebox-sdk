@@ -2,6 +2,8 @@
 
 export LANG=C
 
+unset DISPLAY
+
 TMP_DIR=$(pwd)/tmp
 
 rm -rf ${TMP_DIR}
