@@ -11,7 +11,7 @@ WRITE_PATTERN=all
 
 # Burn patterns: G4MH, CR52
 BURN_PATTERNS=( "dummy" "dummy" # -0(dummy)
-    "Trampoline" "Trampoline (default)"  # -1
+    "Trampoline" "Trampoline"  # -1
     "SafeG-Auto" "Trampoline"  # -2
     "Trampoline" "Zephyr"      # -3
     "SafeG-Auto" "Zephyr"      # -4
