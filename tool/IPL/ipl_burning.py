@@ -303,6 +303,18 @@ def main():
 
     if not test_dev.isOpen():
         test_dev.open()
+        
+    ################################################
+    # U-boot control to boot in scif download mode #
+    ################################################
+    if SOC == "s4sk":
+        print_debug("INFO", "Please power on the board. Wait for U-Boot is booting...")
+        sys.stdout.flush()
+        test_dev.wait("autoboot:" , 0.2, "\n")
+        test_dev.send("i2c dev 5; i2c mw 0x70 0x0008.2 0x00000080805926BF; i2c mw 0x70 0x0024.2 0x1\n")
+        test_dev.wait("please send !" , 0.2)
+    ################################################
+    
     print_debug("INFO", "Monitor file sending...")
     sys.stdout.flush()
     test_dev.sendfile(MOT_DIR + "/" + ipl_config["flash_writer"][SOC])

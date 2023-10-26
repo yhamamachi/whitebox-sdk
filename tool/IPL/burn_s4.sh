@@ -112,3 +112,10 @@ sed -i 's/S315EB23695000000000000010E2000000000000000031/S315EB23695000000000000
 
 # Flash IPL
 python3 ipl_burning.py $1 $USB_PORT $MOT_PATH $IPL_PATH $WRITE_PATTERN
+
+if [[ "$1" == "s4sk" ]]; then
+    echo "Please power off the borad completely by removing and inserting Power adaptor."
+    echo "Note: Reset by power/reset buttion is not enought."
+    echo "     It required to shutdown power supply to FPGA."
+fi
+
