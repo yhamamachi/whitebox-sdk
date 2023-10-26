@@ -94,17 +94,13 @@ else
     Usage; exit
 fi
 
-if [ ! -d "deploy" ]; then
-  echo -e "\e[31mERROR: Please copy the built deploy directory\e[m"
-  exit
-fi
 case $G4MH in
-    "Trampoline") cp deploy/g4mh_trampoline_deploy/g4mh.srec App_CDD_ICCOM_S4_Sample_G4MH.srec;;
-    "SafeG-Auto") cp deploy/g4mh_safegauto_deploy/g4mh.srec App_CDD_ICCOM_S4_Sample_G4MH.srec;;
+    "Trampoline") cp g4mh_trampoline_deploy/g4mh.srec App_CDD_ICCOM_S4_Sample_G4MH.srec;;
+    "SafeG-Auto") cp g4mh_safegauto_deploy/g4mh.srec App_CDD_ICCOM_S4_Sample_G4MH.srec;;
 esac
 case $CR52 in
-    "Trampoline") cp deploy/cr52_trampoline_deploy/cr52.srec App_CDD_ICCOM_S4_Sample_CR52.srec;;
-    "Zephyr")     cp deploy/cr52_zephyr_deploy/cr52.srec App_CDD_ICCOM_S4_Sample_CR52.srec;;
+    "Trampoline") cp cr52_trampoline_deploy/cr52.srec App_CDD_ICCOM_S4_Sample_CR52.srec;;
+    "Zephyr")     cp cr52_zephyr_deploy/cr52.srec App_CDD_ICCOM_S4_Sample_CR52.srec;;
 esac
 
 # Changed CR52 memory placement to 0x40040000

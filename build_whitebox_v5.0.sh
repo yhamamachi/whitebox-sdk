@@ -25,6 +25,12 @@ elif [[ "$1" != "spider" ]] && [[ "$1" != "s4sk" ]]; then
     Usage; exit
 fi
 
+if [[ $(ls tool/ICUMX_Loader*.zip | wc -l) -ne 1 ]]; then
+    echo -e "\e[31mERROR: ICUMX_Loader package is not found or exist multiply."
+    echo -e "\e[31m       Please copy only 1 file into tool directory."
+    exit
+fi
+
 # deploy images
 cd ${BASE_DIR}
 mkdir -p deploy
@@ -48,9 +54,13 @@ cd ${BASE_DIR}/application_cpu
 ./build_xenhypervisor.sh $1 -c
 cd ${BASE_DIR}/
 cp application_cpu/work/full.img.gz deploy/
-cp application_cpu/work/yocto/build-domd/tmp/deploy/images/${1}/bl31-${1}.srec deploy/
-cp application_cpu/work/yocto/build-domd/tmp/deploy/images/${1}/tee-${1}.srec deploy/
-cp application_cpu/work/yocto/build-domd/tmp/deploy/images/${1}/u-boot-elf-${1}.srec deploy/
+mkdir -p deploy/
+unzip -j tool/ICUMX_Loader_and_Flashwriter_Package_for_R-Car_S4_Starter_Kit_SDKv*.zip -d deploy
+cp application_cpu/work/yocto/build-domd/tmp/deploy/images/${1}/bl31-${1}.srec \
+    application_cpu/work/yocto/build-domd/tmp/deploy/images/${1}/tee-${1}.srec \
+    application_cpu/work/yocto/build-domd/tmp/deploy/images/${1}/u-boot-elf-${1}.srec \
+    -t deploy
+cp -r tool/IPL/* -t deploy/
 
 ls -l deploy
 
