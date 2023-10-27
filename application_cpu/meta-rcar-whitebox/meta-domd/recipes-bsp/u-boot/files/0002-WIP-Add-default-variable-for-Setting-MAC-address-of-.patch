@@ -1,0 +1,28 @@
+From 156394a4fdfccfd666ec532fc78d112de1cf53d0 Mon Sep 17 00:00:00 2001
+From: Yuya Hamamachi <yuya.hamamachi.sx@renesas.com>
+Date: Fri, 27 Oct 2023 10:15:54 +0900
+Subject: [PATCH 2/2] WIP: Add default variable for Setting MAC address of S4SK
+
+Signed-off-by: Yuya Hamamachi <yuya.hamamachi.sx@renesas.com>
+---
+ include/configs/rcar-gen4-common.h | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/include/configs/rcar-gen4-common.h b/include/configs/rcar-gen4-common.h
+index 72b2d5f4ce..46e647eff5 100644
+--- a/include/configs/rcar-gen4-common.h
++++ b/include/configs/rcar-gen4-common.h
+@@ -56,7 +56,9 @@
+ #define CONFIG_EXTRA_ENV_SETTINGS	\
+ 	"usb_pgood_delay=2000\0"	\
+ 	"bootm_size=0x10000000\0"       \
+-        "flash_mmc='tftp 0x480000000 full.img.gz; gzwrite mmc 0 0x480000000 ${filesize} 1000000 0'\0" \
++        "flash_mmc=tftp 0x480000000 full.img.gz; gzwrite mmc 0 0x480000000 ${filesize} 1000000 0\0" \
++        "dump_macaddr=i2c dev 5; i2c read 0x70 0x0060.2 0x06 0x48000000 && for i in 0 1 2 3 4 5; do setexpr.b M$i *0x4800000$i; done\0" \
++        "set_macaddr=run dump_macaddr && setenv ethaddr $M5:$M4:$M3:$M2:$M1:$M0; for i in 0 1 2 3 4 5; do env delete M$i; done\0" \
+ 
+ #define CONFIG_BOOTCOMMAND	\
+ 	"ext4load mmc 0:5 0x83000000 boot-mmc.uImage;" \
+-- 
+2.34.1
+

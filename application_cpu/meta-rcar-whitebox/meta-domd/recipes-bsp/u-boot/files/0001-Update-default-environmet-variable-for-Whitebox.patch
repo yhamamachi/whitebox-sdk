@@ -1,0 +1,33 @@
+From 0246b4558818fa77ab44482c45bf3227d66aed96 Mon Sep 17 00:00:00 2001
+From: Yuya Hamamachi <yuya.hamamachi.sx@renesas.com>
+Date: Thu, 26 Oct 2023 14:27:44 +0900
+Subject: [PATCH 1/2] Update default environmet variable for Whitebox
+
+Signed-off-by: Yuya Hamamachi <yuya.hamamachi.sx@renesas.com>
+---
+ include/configs/rcar-gen4-common.h | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/include/configs/rcar-gen4-common.h b/include/configs/rcar-gen4-common.h
+index b7794c5e85..72b2d5f4ce 100644
+--- a/include/configs/rcar-gen4-common.h
++++ b/include/configs/rcar-gen4-common.h
+@@ -55,11 +55,11 @@
+ 
+ #define CONFIG_EXTRA_ENV_SETTINGS	\
+ 	"usb_pgood_delay=2000\0"	\
+-	"bootm_size=0x10000000\0"
++	"bootm_size=0x10000000\0"       \
++        "flash_mmc='tftp 0x480000000 full.img.gz; gzwrite mmc 0 0x480000000 ${filesize} 1000000 0'\0" \
+ 
+ #define CONFIG_BOOTCOMMAND	\
+-	"tftp 0x48080000 Image; " \
+-	"tftp 0x48000000 Image-"CONFIG_DEFAULT_FDT_FILE"; " \
+-	"booti 0x48080000 - 0x48000000"
++	"ext4load mmc 0:5 0x83000000 boot-mmc.uImage;" \
++	"source 0x83000000"
+ 
+ #endif	/* __RCAR_GEN4_COMMON_H */
+-- 
+2.34.1
+
