@@ -311,7 +311,9 @@ def main():
         print_debug("INFO", "Please power on the board. Wait for U-Boot is booting...")
         sys.stdout.flush()
         test_dev.wait("autoboot:" , 0.2, "\n")
-        test_dev.send("i2c dev 5; i2c mw 0x70 0x0008.2 0x00000080805926BF; i2c mw 0x70 0x0024.2 0x1\n")
+        test_dev.send("i2c dev 5\n")
+        test_dev.wait("=>", 0.2)
+        test_dev.send("i2c mw 0x70 0x0008.2 0x00000080805926BF; i2c mw 0x70 0x0024.2 0x1\n")
         test_dev.wait("please send !" , 0.2)
     ################################################
     
