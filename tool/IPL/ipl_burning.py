@@ -149,6 +149,17 @@ def eMMC_burn_file(dev, index, ipl_path, soc, ipl_config, img_addr, flash_addr):
     dev.sendln()
     dev.sendln()
 
+def flash_burn_file_via_uboot(dev, index, ipl_path, soc, ipl_config, img_addr, flash_addr):
+    dev.sendln()
+    dev.wait("=>", 0.2, "mw.b 0x48000000 0x00 0x100000")
+    addr_diff=0x48000000 - int("0x{}".format(img_addr),0)
+    dev.wait("=>", 0.2, "loads {offset}".format(offset=hex(addr_diff)))
+    dev.wait("Ready for S-Record download ...", 0.2)
+    dev.sendfile(ipl_path + "/" + ipl_config["ipl"][soc][index]["name"])
+    dev.wait("=>", 0.2, "sf update 0x48000000 {flash_addr} $filesize".format(flash_addr=flash_addr))
+    dev.wait("=>", 0.2, "echo")
+    return
+
 def get_imgaddr(file):
     """Get Image address in file srec.
     Address stores in the second line from character 5th to 12th.
@@ -303,20 +314,31 @@ def main():
 
     if not test_dev.isOpen():
         test_dev.open()
-        
-    ################################################
-    # U-boot control to boot in scif download mode #
-    ################################################
-    if SOC == "s4sk":
+
+    #############################################################
+    # U-boot control to stop autoboot and enter in U-boot shell #
+    #############################################################
+    if SOC == "s4sk" or SOC == "spider":
         print_debug("INFO", "Please power on the board. Wait for U-Boot is booting...")
         sys.stdout.flush()
         test_dev.wait("autoboot:" , 0.2, "\n")
-        test_dev.send("i2c dev 5\n")
-        test_dev.wait("=>", 0.2)
-        test_dev.send("i2c mw 0x70 0x0008.2 0x00000080805926BF; i2c mw 0x70 0x0024.2 0x1\n")
-        test_dev.wait("please send !" , 0.2)
+
+        if False: # parts of files cannot be written via u-boot....
+            test_dev.wait("=>", 0.2, "sf probe")
+            for i in range(len(FILE_IPL_WILL_BURN)):
+                flash_burn_file_via_uboot(test_dev,
+                    FILE_INFO_INDEX[i], IPL_DIR, SOC, ipl_config, IMGADR_WILL_BURN[i], FLASHADR_WILL_BURN[i])
+            print_debug("INFO", "Download file .srec done")
+            exit(0)
+        elif SOC == "s4sk": # Entering the scif download mode
+            test_dev.send("i2c dev 5\n")
+            test_dev.wait("=>", 0.2)
+            test_dev.send("i2c mw 0x70 0x0008.2 0x00000080805926BF; i2c mw 0x70 0x0024.2 0x1\n")
+            test_dev.wait("please send !" , 0.2)
+        else: # Nothing to do
+            pass
     ################################################
-    
+
     print_debug("INFO", "Monitor file sending...")
     sys.stdout.flush()
     test_dev.sendfile(MOT_DIR + "/" + ipl_config["flash_writer"][SOC])
