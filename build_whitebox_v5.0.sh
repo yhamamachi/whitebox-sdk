@@ -33,6 +33,7 @@ fi
 
 # deploy images
 cd ${BASE_DIR}
+rm -rf deploy
 mkdir -p deploy
 
 # Build G4MH
@@ -51,7 +52,7 @@ mv ${BASE_DIR}/realtime_cpu/deploy ${BASE_DIR}/deploy/cr52_zephyr_deploy
 
 # Build CA55
 cd ${BASE_DIR}/application_cpu
-./build_xenhypervisor.sh $1 -c
+docker-run.sh yocto:2004 ./build_xenhypervisor.sh $1 -c
 cd ${BASE_DIR}/
 cp application_cpu/work/full.img.gz deploy/
 mkdir -p deploy/
