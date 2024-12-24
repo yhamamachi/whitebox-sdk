@@ -108,7 +108,8 @@ cd ${SCRIPT_DIR}/work
 moulin ./aos-rcar-gen4-wb.yaml \
     --TARGET_BOARD $1 \
     --USING_UFS_AS_STORAGE $USING_UFS \
-    --ENABLE_DOMU $USING_DOMU
+    --ENABLE_DOMU $USING_DOMU \
+    --BUILD_DOMD_SDK no
 ninja || ninja
 ninja image-full
 
