@@ -13,4 +13,6 @@ And also, files are licensed under the same license as original repository.
   - aws-iot-fleetwise
 - [4]: meta-openembedded/meta-networking: cb27ff9dcb2258e9cf07dd6ab95bfb408c8232af
   - vsomeip
+- [5]: meta-aos: e0277d3ef7a563a98abd48d1b2c0c80072d0608e
+  - go
 
