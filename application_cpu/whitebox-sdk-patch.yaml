@@ -98,7 +98,6 @@
           domd:
             builder:
               conf:
-                - [PACKAGE_CLASSES, "package_deb"]
                 - [TOOLCHAIN_TARGET_TASK_remove, "target-sdk-provides-dummy"]
 
   ENABLE_AWS:
